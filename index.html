@@ -1,0 +1,117 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="description" content="Interactive AXI4 learning series: basics, FIXED, INCR and WRAP bursts, and the 4 KB boundary rule.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23060a14%27/%3E%3Cpath d=%27M6 10h20M6 16h20M6 22h20%27 stroke=%27%2322d3ee%27 stroke-width=%273%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AXI4 Interactive Series</title>
+<style>
+:root{--bg:#060a14;--t:#e7eef9;--m:#8fa2c2;--a:#22d3ee;--b:#a78bfa;--c:#fbbf24;color-scheme:dark}
+html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+svg{width:100vw;height:100vh;display:block}
+.fade{opacity:0;animation:fi 1s ease forwards}
+@keyframes fi{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.chip{cursor:pointer}
+.chip rect{transition:fill .2s}
+.chip:hover rect,.chip:focus rect{fill:#1a2b4d}
+.chip:focus{outline:none}
+.chip:focus-visible rect{stroke-width:4}
+.btn{position:fixed;right:16px;bottom:14px;background:#0c1424cc;color:var(--m);border:1px solid #2a3b5e;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+.btn:hover{color:#fff;border-color:var(--a)}
+.mlinks{display:none}
+@media (max-aspect-ratio:1/1){
+ .wrap{bottom:auto;height:62vw}
+ svg{height:62vw}
+ .mlinks{display:grid;position:fixed;left:0;right:0;bottom:0;top:62vw;overflow:auto;padding:12px 16px 64px;gap:8px;align-content:start}
+ .mlinks p{margin:0 0 4px;color:var(--m);font-size:13px;font-weight:700;letter-spacing:.08em}
+ .mlinks a{display:flex;align-items:center;gap:12px;min-height:50px;padding:0 14px;border-radius:12px;background:#0f1b30;border:2px solid var(--k);color:var(--t);text-decoration:none;font-weight:700;font-size:16px}
+ .mlinks a span{color:var(--m);font-weight:500;font-size:13px;margin-left:auto}
+}
+@media (prefers-reduced-motion:reduce){.fade{animation:none;opacity:1}}
+</style></head><body>
+<div class="wrap"><svg id="sv" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" role="img" aria-label="AMBA AXI4 interactive series title"></svg></div>
+<nav class="mlinks" id="ml" aria-label="Series pages"></nav>
+<button class="btn" id="rp">↻ Replay</button>
+<script>
+{
+const NS='http://www.w3.org/2000/svg',sv=document.getElementById('sv');
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function E(t,a,p,txt){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;(p||sv).appendChild(e);return e}
+const BU='burst.html';
+const PAGES=[
+ {n:'AXI4 Basics',h:'basics.html',c:'#22d3ee',d:'Channels, handshake, IDs'},
+ {n:'FIXED Burst',h:BU+'#fixed',c:'#a78bfa',d:'Same address every beat'},
+ {n:'INCR Burst',h:BU+'#incr',c:'#34d399',d:'Next address every beat'},
+ {n:'WRAP Burst',h:BU+'#wrap',c:'#fbbf24',d:'Wraps inside a window'},
+ {n:'4 KB Boundary',h:'4kb-boundary.html',c:'#f472b6',d:'Never cross a page'}
+];
+document.getElementById('ml').innerHTML='<p>OPEN A TOPIC</p>'+PAGES.map((p,i)=>`<a href="${p.h}" style="--k:${p.c}">${i+1}. ${p.n}<span>${p.d}</span></a>`).join('');
+const CH=[
+ {id:'AW',nm:'Write Address',dir:1,c:'#22d3ee',pk:['ADDR']},
+ {id:'W',nm:'Write Data',dir:1,c:'#a78bfa',pk:['D0','D1','D2','D3']},
+ {id:'B',nm:'Write Response',dir:-1,c:'#34d399',pk:['OKAY']},
+ {id:'AR',nm:'Read Address',dir:1,c:'#fbbf24',pk:['ADDR']},
+ {id:'R',nm:'Read Data',dir:-1,c:'#f472b6',pk:['D0','D1','D2','D3']}
+];
+let parts=[],t0=performance.now();
+function build(){while(sv.firstChild)sv.removeChild(sv.firstChild);parts=[];t0=performance.now();
+const d=E('defs',{});
+const g1=E('linearGradient',{id:'gt',x1:0,x2:1},d);[['0','#22d3ee'],['.5','#a78bfa'],['1','#fbbf24']].forEach(([o,c])=>E('stop',{offset:o,'stop-color':c},g1));
+const rg=E('radialGradient',{id:'glow',cx:.5,cy:.45,r:.6},d);E('stop',{offset:0,'stop-color':'#12305a','stop-opacity':.9},rg);E('stop',{offset:1,'stop-color':'#060a14','stop-opacity':0},rg);
+E('rect',{x:0,y:0,width:1600,height:900,fill:'#060a14'});E('rect',{x:0,y:0,width:1600,height:900,fill:'url(#glow)'});
+const gg=E('g',{opacity:.12});for(let x=0;x<=1600;x+=50)E('line',{x1:x,y1:0,x2:x,y2:900,stroke:'#3b82f6','stroke-width':.6},gg);for(let y=0;y<=900;y+=50)E('line',{x1:0,y1:y,x2:1600,y2:y,stroke:'#3b82f6','stroke-width':.6},gg);
+// five AXI channels between master and slave
+const cp=E('clipPath',{id:'cl'},d);E('rect',{x:440,y:630,width:920,height:240},cp);
+const lanes=E('g',{class:'fade',style:'animation-delay:1.8s'});
+CH.forEach((ch,i)=>{const y=652+i*46;
+ E('line',{x1:250,y1:y,x2:1360,y2:y,stroke:'#1e293b','stroke-width':3},lanes);
+ E('text',{x:256,y:y+6,fill:ch.c,'font-size':17,'font-weight':900,'font-family':'ui-monospace,Menlo,monospace'},lanes,ch.id);
+ E('text',{x:296,y:y+5,fill:'#8fa2c2','font-size':11,'font-weight':700},lanes,ch.dir>0?'▶':'◀');
+ E('text',{x:314,y:y+5,fill:'#8fa2c2','font-size':13,'font-weight':600},lanes,ch.nm);
+});
+const flow=E('g',{'clip-path':'url(#cl)'},lanes);
+CH.forEach((ch,i)=>{const y=652+i*46;const n=ch.pk.length>1?8:3;
+ for(let k=0;k<n;k++){const lab=ch.pk[k%ch.pk.length]+(ch.pk.length>1&&k%4===3?' L':'');
+  const w=lab.length*9+22;const g=E('g',{},flow);
+  E('rect',{x:0,y:y-11,width:w,height:22,rx:11,fill:ch.c,opacity:.9},g);
+  E('text',{x:w/2,y:y+5,'text-anchor':'middle',fill:'#060a14','font-size':12,'font-weight':800,'font-family':'ui-monospace,Menlo,monospace'},g,lab);
+  parts.push({el:g,sp:150+i*18,off:k*(1100/n)+i*90,dir:ch.dir,w})}});
+const dev=(x,c,a,b,ic)=>{const g=E('g',{class:'fade',style:'animation-delay:2s'});E('rect',{x,y:630,width:220,height:220,rx:18,fill:c,opacity:.95},g);E('rect',{x:x+6,y:636,width:208,height:208,rx:14,fill:'none',stroke:'#ffffff30','stroke-width':1.5},g);
+ ic(g,x+110,682);E('text',{x:x+110,y:760,'text-anchor':'middle',fill:'#fff','font-size':24,'font-weight':800},g,a);E('text',{x:x+110,y:788,'text-anchor':'middle',fill:'#e2e8f0','font-size':15,'font-weight':600},g,b);
+ E('text',{x:x+110,y:822,'text-anchor':'middle',fill:'#ffffffb0','font-size':12,'font-weight':700,'letter-spacing':1.5},g,x<800?'STARTS TRANSACTIONS':'ANSWERS THEM')};
+const cpu=(g,cx,cy)=>{cy+=4;const s2=29;
+ for(let k=0;k<6;k++){const o=-s2+8+k*(2*s2-16)/5;[[cx+o,cy-s2-10,cx+o,cy-s2],[cx+o,cy+s2,cx+o,cy+s2+10],[cx-s2-10,cy+o,cx-s2,cy+o],[cx+s2,cy+o,cx+s2+10,cy+o]].forEach(([a,b,c,d2])=>E('line',{x1:a,y1:b,x2:c,y2:d2,stroke:'#c7d2fe','stroke-width':3,'stroke-linecap':'round'},g))}
+ E('rect',{x:cx-s2,y:cy-s2,width:2*s2,height:2*s2,rx:7,fill:'#1e1b4b',stroke:'#c7d2fe','stroke-width':2.5},g);E('rect',{x:cx-20,y:cy-20,width:40,height:40,rx:4,fill:'#312e81',stroke:'#a5b4fc','stroke-width':1.5},g);
+ E('text',{x:cx,y:cy+6,'text-anchor':'middle',fill:'#e0e7ff','font-size':14,'font-weight':900},g,'CPU')};
+const mem=(g,cx,cy)=>{const w=170,h=50,x0=cx-w/2,y0=cy-h/2;
+ E('rect',{x:x0,y:y0,width:w,height:h,rx:4,fill:'#14532d',stroke:'#86efac','stroke-width':2},g);
+ for(let k=0;k<4;k++)E('rect',{x:x0+10+k*39,y:y0+8,width:32,height:26,rx:3,fill:'#0f172a',stroke:'#64748b'},g);
+ for(let k=0;k<26;k++)E('rect',{x:x0+6+k*6.2,y:y0+h-8,width:3.5,height:8,fill:'#fde68a',opacity:.9},g);
+ E('rect',{x:cx-4,y:y0+h-9,width:8,height:9,fill:'#14532d'},g);
+ E('text',{x:cx,y:y0+h+18,'text-anchor':'middle',fill:'#bbf7d0','font-size':12,'font-weight':700},g,'DDR · SRAM · Peripheral')};
+dev(20,'#4338ca','AXI Master','CPU · DMA · GPU',cpu);dev(1360,'#047857','AXI Slave','Memory controller',mem);
+// title block
+const tb=E('g',{});
+E('text',{x:800,y:212,'text-anchor':'middle',fill:'#8fa2c2','font-size':22,'font-weight':700,'letter-spacing':8,class:'fade',style:'animation-delay:.3s'},tb,'ARM AMBA');
+E('text',{x:800,y:340,'text-anchor':'middle',fill:'url(#gt)','font-size':112,'font-weight':900,'letter-spacing':-1,class:'fade',style:'animation-delay:.5s'},tb,'AXI4 Protocol');
+E('text',{x:800,y:394,'text-anchor':'middle',fill:'#e7eef9','font-size':30,'font-weight':600,class:'fade',style:'animation-delay:.9s'},tb,'From the VALID/READY Handshake to Bursts and the 4 KB Rule');
+const nb=E('g',{class:'fade',style:'animation-delay:1.4s'},tb);
+E('rect',{x:520,y:418,width:560,height:112,rx:18,fill:'#0c1628',stroke:'url(#gt)','stroke-width':2.5},nb);
+E('text',{x:800,y:452,'text-anchor':'middle',fill:'#8fa2c2','font-size':16,'font-weight':700,'letter-spacing':4},nb,'PRESENTED BY');
+E('text',{x:800,y:494,'text-anchor':'middle',fill:'#ffffff','font-size':38,'font-weight':800},nb,'Anil Reddy Tatigotla');
+E('text',{x:800,y:518,'text-anchor':'middle',fill:'#22d3ee','font-size':15,'font-weight':700},nb,'Design Verification Engineer');
+// topic chips = links to the five pages
+const cw=PAGES.map(p=>(p.n.length+3)*10.5+40),gap=14;let x=800-(cw.reduce((s,w)=>s+w,0)+gap*(PAGES.length-1))/2;
+PAGES.forEach((p,i)=>{const w=cw[i];
+ const a=E('a',{href:p.h,class:'chip fade',style:`animation-delay:${2.6+i*.18}s`,tabindex:0,'aria-label':`Open page ${i+1}: ${p.n}`});
+ E('title',{},a,`${p.n}: ${p.d}`);
+ E('rect',{x,y:552,width:w,height:44,rx:22,fill:'#0f1b30',stroke:p.c,'stroke-width':2},a);
+ E('text',{x:x+w/2,y:580,'text-anchor':'middle',fill:'#e7eef9','font-size':17,'font-weight':700},a,(i+1)+'. '+p.n);
+ x+=w+gap});
+E('text',{x:800,y:618,'text-anchor':'middle',fill:'#5b6b88','font-size':14,'font-weight':600,class:'fade',style:'animation-delay:3.6s'},null,'Click a topic to open its interactive page');
+}
+function loop(now){const t=reduce?3:Math.max(0,(now-t0)/1000);
+ parts.forEach(p=>{const u=(p.off+t*p.sp)%1180;const x=p.dir>0?340+u:1360-u;p.el.setAttribute('transform',`translate(${x-(p.dir>0?p.w:0)},0)`)});
+ if(!reduce)requestAnimationFrame(loop)}
+document.getElementById('rp').onclick=()=>{build();if(reduce)loop(0)};addEventListener('keydown',e=>{if(e.key==='r')build()});
+build();requestAnimationFrame(loop);
+}
+</script></body></html>

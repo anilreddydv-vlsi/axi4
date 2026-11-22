@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Interactive explorer for the AXI 4 KB boundary rule, with a burst splitter and SVA checks.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23060a14%27/%3E%3Cpath d=%27M6 10h20M6 16h20M6 22h20%27 stroke=%27%2322d3ee%27 stroke-width=%273%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AXI 4 KB Boundary</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE everyday learning, precise like a lab notebook for a DV engineer
+   IDEA a system address map: 4 KB pages laid end to end, each owned by a slave, with a burst drawn on top
+   PICTURE live page strip with the burst bar, plus a zoom row of beats either side of the boundary
+   COLOUR white / ink, ultramarine for bytes in the start page, red for bytes past the boundary; night #0d0e18
+   TYPE Spectral 600 headings + Inter text, JetBrains Mono for addresses
+   LAYOUT laptop: controls left, picture and verdict right, split table below; phone: title, picture, controls */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0d0e18);--ink:light-dark(#14110f,#e8e9f3);--mut:light-dark(#596075,#9ba1b8);--rule:light-dark(#dde0ea,#272b40);--u:light-dark(#1d2bd8,#7f8aff);--uink:light-dark(#ffffff,#0d0e18);--tint:light-dark(#eef0fe,#161a3a);--panel:light-dark(#f6f7fb,#13152b);--red:light-dark(#cf1f2b,#ff6d6d);--redt:light-dark(#fdecee,#3a1418)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(28px,4vw,56px) max(5vw,16px)}
+.wrap{max-width:1240px;margin:0 auto}
+h1,h2{font-family:Spectral,Georgia,serif;font-weight:600;line-height:1.08;letter-spacing:-.02em;text-wrap:balance;margin:0}
+h1{font-size:clamp(32px,4.4vw,48px)}
+h2{font-size:clamp(26px,3vw,34px);margin-bottom:10px}
+h3{font-size:17px;margin:0 0 6px}
+p{margin:0 0 12px;max-width:68ch}
+.lede{color:var(--mut);font-size:17px;margin-top:10px}
+.mono,code,pre{font-family:"JetBrains Mono",ui-monospace,monospace}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:16px;font-size:15px}
+nav.toc a{color:var(--u);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--u) 35%,transparent)}
+.top{padding-bottom:12px}
+.ctrl{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:16px;display:grid;gap:18px;margin-bottom:22px}
+.types{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.types button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 14px;text-align:left;min-height:64px}
+.types b{font-size:18px}
+.types span{font-size:14px;color:var(--mut);line-height:1.3}
+.types button[aria-pressed=true] span{color:var(--uink);opacity:.9}
+.knobs{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.2fr);gap:18px}
+.ctrl small{font-weight:500;color:var(--mut);font-family:"JetBrains Mono",monospace;font-size:13px;margin-left:4px}
+.step{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;gap:6px}
+.step button{font-size:22px;padding:0;line-height:1}
+.step input{text-align:center;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips button{min-height:40px;font-size:14px;padding:0 12px;border-radius:20px}
+.slide{margin-top:10px}
+.slide .ends{display:flex;justify-content:space-between;font:13px "JetBrains Mono",monospace;color:var(--mut)}
+#typedesc{display:none}
+#size{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
+.lab,.ctrl label{font-size:14px;font-weight:600;display:block;margin-bottom:6px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+button{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:8px;min-height:44px;padding:0 12px;cursor:pointer}
+button:hover{border-color:var(--u)}
+button:focus-visible,input:focus-visible{outline:3px solid color-mix(in srgb,var(--u) 50%,transparent);outline-offset:2px}
+button[aria-pressed=true]{background:var(--u);color:var(--uink);border-color:var(--u)}
+.seg button{flex:1 1 auto}
+.seg.sm button{padding:0 8px;min-width:44px}
+input[type=text]{font:16px "JetBrains Mono",monospace;width:100%;min-height:44px;padding:0 10px;border:1px solid var(--rule);border-radius:8px;background:var(--bg);color:var(--ink)}
+input[type=range]{width:100%;accent-color:var(--u);height:32px}
+.hint{font-size:13px;color:var(--mut);margin-top:4px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.verdict{border-radius:10px;padding:14px 16px;margin-bottom:16px}
+.verdict.ok{background:var(--tint)}
+.verdict.bad{background:var(--redt)}
+.verdict strong{display:block;font:600 clamp(22px,2.6vw,28px)/1.15 Spectral,Georgia,serif}
+.verdict.bad strong{color:var(--red)}
+.verdict p{margin:6px 0 0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(9em,1fr));gap:10px;margin-bottom:18px}
+.stat{border-top:2px solid var(--ink);padding-top:6px}
+.stat span{display:block;font-size:13px;color:var(--mut)}
+.stat strong{font:600 18px "JetBrains Mono",monospace;white-space:nowrap}
+.strip{position:relative;display:grid;grid-template-columns:repeat(var(--p),minmax(0,1fr));border:1px solid var(--rule);border-radius:8px;overflow:hidden;height:150px}
+.pg{border-left:2px dashed var(--red);padding:10px;background:var(--panel);display:flex;flex-direction:column;justify-content:space-between}
+.pg:first-child{border-left:0}
+.pg:nth-child(even){background:var(--bg)}
+.pg b{font-size:15px}
+.pg span{font:13px "JetBrains Mono",monospace;color:var(--mut)}
+.bar{position:absolute;top:58px;height:34px;display:flex;border-radius:4px;overflow:hidden;box-shadow:0 0 0 2px var(--bg)}
+.bar i{display:block;height:100%}
+.bar .in{background:var(--u)}
+.bar .out{background:var(--red);background-image:repeating-linear-gradient(45deg,transparent 0 6px,rgba(255,255,255,.28) 6px 12px)}
+.ticks{display:grid;grid-template-columns:repeat(var(--p),minmax(0,1fr));font:13px "JetBrains Mono",monospace;color:var(--mut);margin-top:4px}
+.ticks span:not(:first-child){margin-left:-2.6em}
+.zoom{margin-top:20px}
+.cells{display:flex;flex-wrap:wrap;gap:4px;align-items:stretch}
+.cell{flex:0 0 auto;min-width:74px;border-radius:6px;padding:6px 8px;font:13px "JetBrains Mono",monospace;background:var(--u);color:var(--uink);line-height:1.25}
+.cell small{display:block;font:12px Inter,sans-serif;opacity:.85}
+.cell.x{background:var(--red);color:#fff}
+.cell.skip{background:none;color:var(--mut);display:grid;place-items:center;min-width:40px}
+.kbmark{flex:0 0 auto;width:3px;background:var(--red);border-radius:2px;position:relative;margin:0 6px}
+.kbmark::after{content:"4 KB";position:absolute;top:-20px;left:50%;transform:translateX(-50%);font:600 12px Inter,sans-serif;color:var(--red);white-space:nowrap}
+.cells.hasmark{padding-top:20px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:13px;color:var(--mut);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td .mono{white-space:nowrap}
+.alt{background:var(--panel);border-block:1px solid var(--rule)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}
+.why{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px}
+.why div{border-top:2px solid var(--u);padding-top:10px}
+.calc{border:1px solid var(--rule);border-radius:10px;padding:14px 16px;font:14px/1.7 "JetBrains Mono",monospace;overflow-wrap:anywhere}
+.calc b{color:var(--u)}
+.calc .bad{color:var(--red);font-weight:600}
+.types td:first-child{font-weight:600}
+.quiz{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.q{border:1px solid var(--rule);border-radius:10px;padding:14px;background:var(--bg)}
+.q p{font-weight:600}
+.q .opts{display:grid;gap:6px}
+.q button{text-align:left}
+.q button.right{background:var(--tint);border-color:var(--u)}
+.q button.wrong{background:var(--redt);border-color:var(--red)}
+.q .ex{font-size:14px;color:var(--mut);margin-top:8px}
+pre{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:14px;font-size:13.5px;line-height:1.5;margin:0}
+.code{position:relative;margin-bottom:16px}
+.code button{position:absolute;top:8px;right:8px;min-height:34px;font-size:13px}
+footer{color:var(--mut);font-size:14px}
+@media(max-width:900px){.knobs{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.two,.why{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:560px){.knobs{grid-template-columns:minmax(0,1fr)}.types button{min-height:48px;align-items:center;justify-content:center}.types span{display:none}#typedesc{display:block}.ctrl{gap:14px;padding:12px}.chips button{min-height:38px;padding:0 10px}}
+@media(max-width:600px){table{font-size:13px}th,td{padding:6px 4px}.strip{height:130px}.pg{padding:8px}.pg b{font-size:13px}.cell{min-width:64px}}
+.series{display:flex;align-items:center;gap:4px;overflow-x:auto;padding:8px max(5vw,16px);border-bottom:1px solid var(--rule);background:var(--bg);font-size:14px;white-space:nowrap}
+.series a{flex:none;color:var(--ink);text-decoration:none;padding:0 12px;border-radius:8px;min-height:40px;display:inline-flex;align-items:center}
+.series a:hover{background:var(--tint)}
+.series a[aria-current=page]{background:var(--u);color:var(--uink);font-weight:600}
+.series .home{font-weight:700;margin-right:6px;border:1px solid var(--rule)}
+
+/* series dark theme, matches the home page */
+:root,:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark;--bg:#060a14;--ink:#e7eef9;--mut:#8fa2c2;--rule:#1f2c47;--u:#22d3ee;--uink:#060a14;--tint:#0f1b30;--panel:#0c1424;--red:#f87171;--redt:#3a1418;--back:#34d399;--backt:#0e2a22}
+body{background-color:#060a14;background-image:radial-gradient(ellipse 90% 520px at 50% 0,rgba(18,48,90,.85),transparent 75%),linear-gradient(rgba(59,130,246,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,.07) 1px,transparent 1px);background-size:auto,50px 50px,50px 50px}
+h1,h2{font-family:Inter,system-ui,sans-serif;font-weight:800;letter-spacing:-.025em}
+h1{background:linear-gradient(90deg,#22d3ee,#a78bfa 55%,#fbbf24);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:4px}
+.alt{background:rgba(12,20,36,.72);border-color:#1f2c47}
+.series{background:rgba(6,10,20,.88);backdrop-filter:blur(6px)}
+.series a[aria-current=page]{background:linear-gradient(90deg,#22d3ee,#a78bfa);color:#060a14}
+button[aria-pressed=true]{background:#22d3ee;color:#060a14}
+button{background:#0c1424}
+input[type=text]{background:#0c1424}
+pre{background:#0a1120}
+.stat{border-top-color:#2a3b5e}
+nav.toc a,a.go{color:#7dd3fc}
+.verdict strong{font-family:Inter,system-ui,sans-serif;font-weight:800;letter-spacing:-.01em}
+
+/* clear, colour-coded controls */
+button:not(.wv){background:#13213a;border:1.5px solid #34507f;color:#e7eef9;font-weight:600;cursor:pointer;box-shadow:0 3px 0 #04070f,inset 0 1px 0 rgba(255,255,255,.07);transition:transform .12s,border-color .12s,box-shadow .12s,background .12s}
+button:not(.wv):hover{border-color:#22d3ee;background:#17305a;box-shadow:0 3px 0 #04070f,0 0 0 3px rgba(34,211,238,.2);transform:translateY(-1px)}
+button:not(.wv):active{transform:translateY(2px);box-shadow:0 1px 0 #04070f}
+button:not(.wv):focus-visible{outline:3px solid #67e8f9;outline-offset:2px}
+button[aria-pressed=true]:not(.wv),button[aria-pressed=true]:not(.wv):hover{background:linear-gradient(135deg,#22d3ee,#38bdf8);border-color:#a5f3fc;color:#060a14;box-shadow:0 3px 0 #0e7490,0 0 18px rgba(34,211,238,.35)}
+button[aria-pressed=true] span{color:#0b2540!important;opacity:1!important}
+#play,#goW,#goR,#goWR{background:linear-gradient(135deg,#a78bfa,#22d3ee);border-color:#c4b5fd;color:#060a14;font-weight:800;box-shadow:0 3px 0 #4c1d95,0 0 16px rgba(167,139,250,.35)}
+#play:hover,#goW:hover,#goR:hover,#goWR:hover{background:linear-gradient(135deg,#c4b5fd,#67e8f9);border-color:#fff}
+#presets button,#hsp button{background:rgba(251,191,36,.1);border-color:#b7791f;color:#fde68a;box-shadow:0 3px 0 #3d2a05}
+#presets button:hover,#hsp button:hover{background:rgba(251,191,36,.2);border-color:#fbbf24;box-shadow:0 3px 0 #3d2a05,0 0 0 3px rgba(251,191,36,.22)}
+.q button{border-color:#5b4a9e;background:#161a3a}
+.q button:hover{border-color:#a78bfa;box-shadow:0 3px 0 #04070f,0 0 0 3px rgba(167,139,250,.22)}
+.q button.right{background:#0e2a22;border-color:#34d399;color:#d1fae5}
+.q button.wrong{background:#3a1418;border-color:#f87171;color:#fee2e2}
+.step button{font-size:24px;font-weight:700;color:#67e8f9}
+nav.toc a{border:1.5px solid #2a3b5e;border-radius:999px;padding:6px 14px;background:rgba(19,33,58,.7);color:#bae6fd;font-weight:600;font-size:14px;transition:border-color .12s,background .12s}
+nav.toc a:hover{border-color:#22d3ee;background:#17305a;color:#fff}
+.series a:not([aria-current]){border:1px solid #1f2c47}
+.series a:not([aria-current]):hover{border-color:#22d3ee}
+.pager a{border:1.5px solid #34507f;border-radius:999px;padding:8px 16px;background:#13213a}
+.pager a:hover{border-color:#22d3ee}
+.wv{cursor:pointer}
+.wv:hover{background:rgba(34,211,238,.14)!important;outline:1.5px dashed #22d3ee;outline-offset:-3px}
+.code button{color:#bae6fd}
+input[type=text]{border:1.5px solid #34507f}
+input[type=text]:focus{border-color:#22d3ee;outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.2)}
+@media(prefers-reduced-motion:reduce){button:not(.wv){transition:none}button:not(.wv):hover{transform:none}}
+.key{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;font-size:14px;color:#c7d2e6}
+.key span{display:inline-flex;align-items:center;gap:8px}
+.key i{display:inline-block;width:30px;height:18px;border-radius:6px;border:1.5px solid}
+.key .k1{background:linear-gradient(135deg,#a78bfa,#22d3ee);border-color:#c4b5fd}
+.key .k2{background:#13213a;border-color:#34507f}
+.key .k2s{background:linear-gradient(135deg,#22d3ee,#38bdf8);border-color:#a5f3fc}
+.key .k3{background:rgba(251,191,36,.12);border-color:#b7791f;border-radius:9px}
+.key .k4{background:rgba(19,33,58,.7);border-color:#2a3b5e;border-radius:9px}
+
+/* ===== v3: left sidebar, left control panels, unmistakable controls ===== */
+.series .sh,.series .sec{display:none}
+@media(min-width:1000px){
+ body{padding-left:256px}
+ .series{position:fixed;z-index:20;left:0;top:0;bottom:0;width:256px;flex-direction:column;align-items:stretch;gap:6px;overflow-y:auto;padding:18px 14px 24px;border-bottom:0;border-right:1px solid #1f2c47;white-space:normal;background:rgba(6,10,20,.97)}
+ .series a{min-height:46px;padding:0 14px;border-radius:12px;font-size:15px;background:#0c1424}
+ .series .home{justify-content:center;margin-bottom:4px;background:linear-gradient(135deg,rgba(34,211,238,.14),rgba(167,139,250,.14));border-color:#34507f}
+ .series .sh{display:block;font-size:12px;font-weight:700;color:#8fa2c2;letter-spacing:.06em;margin:14px 6px 2px}
+ .series a.sec{display:flex;min-height:36px;font-size:14px;font-weight:500;background:none;border-color:transparent;color:#bae6fd}
+ .series a.sec:hover{background:#0f1b30;border-color:#1f2c47}
+ nav.toc{display:none}
+}
+.demo{display:grid;gap:22px;align-items:start;margin-top:14px}
+@media(min-width:1000px){
+ .demo{grid-template-columns:320px minmax(0,1fr)}
+ .demo>.ctrl{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
+ .demo .types{grid-template-columns:minmax(0,1fr)!important}
+ .demo .knobs{grid-template-columns:minmax(0,1fr)!important}
+ .demo .stage{grid-template-columns:minmax(0,1fr)!important}
+ .demo #presets{display:grid;gap:8px}
+ .demo #presets button{width:100%}
+ .demo .chan{grid-template-columns:92px minmax(0,1fr) 92px}
+}
+.ctrl{background:linear-gradient(180deg,#0f1c36,#0a1326)!important;border:1.5px solid #2c4475!important;border-radius:16px!important;padding:16px!important;display:grid;gap:16px;box-shadow:0 12px 32px rgba(0,0,0,.4);margin:0!important}
+.tryhd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px dashed #2c4475}
+.tryhd b{background:linear-gradient(135deg,#a78bfa,#22d3ee);color:#060a14;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:800}
+.tryhd span{font-size:13px;color:#a9b8d4}
+.ctrl .stack{display:grid;gap:10px}
+.ctrl .stack button{width:100%}
+/* every button */
+button:not(.wv){display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;font-weight:700;background:linear-gradient(180deg,#1c3057,#111d38);border:1.5px solid #4064a3;color:#f1f6ff;cursor:pointer;box-shadow:0 4px 0 #03060d,0 8px 16px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.16);transition:transform .12s,box-shadow .12s,border-color .12s,background .12s}
+button:not(.wv):hover{border-color:#22d3ee;background:linear-gradient(180deg,#22457a,#16305a);box-shadow:0 4px 0 #03060d,0 0 0 3px rgba(34,211,238,.28),0 10px 24px rgba(34,211,238,.2);transform:translateY(-2px)}
+button:not(.wv):active{transform:translateY(3px);box-shadow:0 1px 0 #03060d}
+.types button{display:flex!important;flex-direction:column;align-items:flex-start!important;justify-content:center}
+.ctrl .stack button,.q button,#presets button,#hsp button{justify-content:flex-start;text-align:left}
+/* option buttons get a radio dot */
+.types button,.seg button,.tabs button,#idS,#idD,#bchips button,#tmode button,#tdir button{position:relative;padding-left:38px!important}
+.types button::before,.seg button::before,.tabs button::before,#idS::before,#idD::before,#bchips button::before,#tmode button::before,#tdir button::before{content:"";position:absolute;left:13px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;border:2.5px solid #67e8f9;box-sizing:border-box;box-shadow:0 0 8px rgba(103,232,249,.45)}
+#bchips button{padding-left:30px!important}
+#bchips button::before{left:9px;width:13px;height:13px;margin-top:-6.5px;border-width:2px}
+button[aria-pressed=true]:not(.wv),button[aria-pressed=true]:not(.wv):hover{background:linear-gradient(135deg,#22d3ee,#60a5fa)!important;color:#04101f!important;border-color:#cffafe!important;box-shadow:0 4px 0 #0e7490,0 0 24px rgba(34,211,238,.5)!important}
+button[aria-pressed=true]::before{border-color:#04101f!important;background:radial-gradient(circle,#04101f 0 38%,transparent 42%)!important;box-shadow:none!important}
+button[aria-pressed=true] span{color:#0b2540!important;opacity:1!important}
+/* action buttons */
+#play,#goW,#goR,#goWR{background:linear-gradient(135deg,#7c3aed,#0e7490)!important;color:#fff!important;border:1.5px solid #c4b5fd!important;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.4);box-shadow:0 4px 0 #2e1065,0 0 22px rgba(139,92,246,.5)!important;animation:axpulse 2.4s ease-in-out 3}
+#play:hover,#goW:hover,#goR:hover,#goWR:hover{background:linear-gradient(135deg,#8b5cf6,#0891b2)!important;border-color:#fff!important}
+@keyframes axpulse{50%{box-shadow:0 4px 0 #2e1065,0 0 0 8px rgba(139,92,246,.2),0 0 30px rgba(34,211,238,.55)}}
+/* example loaders */
+#presets button,#hsp button{background:linear-gradient(180deg,#3d2c06,#271c03)!important;border-color:#d97706!important;color:#fde68a!important;box-shadow:0 4px 0 #120c01,inset 0 1px 0 rgba(253,230,138,.18)!important}
+#presets button::before,#hsp button::before{content:"▸";color:#fbbf24;font-size:14px}
+#presets button:hover,#hsp button:hover{border-color:#fbbf24!important;box-shadow:0 4px 0 #120c01,0 0 0 3px rgba(251,191,36,.28)!important}
+/* steppers */
+.step button{font-size:26px!important;color:#67e8f9!important;padding:0!important}
+/* quiz answers with letter badges */
+.q .opts{counter-reset:o}
+.q button{background:linear-gradient(180deg,#241e52,#18143d)!important;border-color:#7262d6!important}
+.q button::before{counter-increment:o;content:counter(o,upper-alpha);flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#a78bfa;color:#0b0820;font-size:13px;font-weight:800}
+.q button.right{background:linear-gradient(180deg,#0f3d2e,#0a2a20)!important;border-color:#34d399!important}
+.q button.right::before{content:"✓";background:#34d399}
+.q button.wrong{background:linear-gradient(180deg,#4d161d,#330f16)!important;border-color:#f87171!important}
+.q button.wrong::before{content:"✕";background:#f87171}
+@media(prefers-reduced-motion:reduce){button:not(.wv){transition:none}button:not(.wv):hover{transform:none}#play,#goW,#goR,#goWR{animation:none}}
+.demo .seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.demo .seg button{padding-right:10px}
+</style>
+</head>
+<body>
+<nav class="series" aria-label="AXI4 series"><a class="home" href="index.html">AXI4 series home</a><a id="nv-p1" href="basics.html">1 · Basics</a><a id="nv-p2" href="burst.html#fixed">2 · FIXED</a><a id="nv-p3" href="burst.html#incr">3 · INCR</a><a id="nv-p4" href="burst.html#wrap">4 · WRAP</a><a id="nv-p5" href="4kb-boundary.html" aria-current="page">5 · 4 KB boundary</a></nav>
+<header class="band top"><div class="wrap">
+<h1>The AXI 4 KB boundary rule</h1>
+<p class="lede">Memory is cut into 4 KB pages: 0x0000–0x0FFF, 0x1000–0x1FFF and so on. An AXI burst must start and end inside the same page. Set a burst below and drag it toward 0x1000 to see what goes wrong.</p>
+<nav class="toc" aria-label="On this page"><a href="#sim">Boundary explorer</a><a href="#what">What and why</a><a href="#types">Which bursts can cross</a><a href="#quiz">Check yourself</a><a href="#dv">DV corner</a><a href="burst.html">Previous: burst types</a></nav>
+<div class="key"><b style="color:#e7eef9">Colour key:</b><span><i class="k2"></i>Option you can pick</span><span><i class="k2s"></i>Option selected</span><span><i class="k3"></i>Load an example</span><span><i class="k4"></i>Jump to a section</span></div>
+
+</div></header>
+
+<section class="band" id="sim" style="padding-top:8px"><div class="wrap"><div class="demo">
+<div class="ctrl">
+<div class="tryhd"><b>Try it</b><span>Change these, watch the address map</span></div>
+ <div><span class="lab">1. Pick a burst type <small>AxBURST</small></span>
+ <div class="types" id="type">
+  <button data-v="INCR"><b>INCR</b><span>Can cross, so it must be checked</span></button>
+  <button data-v="WRAP"><b>WRAP</b><span>Never crosses: window stays in one page</span></button>
+  <button data-v="FIXED"><b>FIXED</b><span>Never crosses: address never moves</span></button>
+ </div><div class="hint" id="typedesc"></div></div>
+ <div class="knobs">
+  <div><label for="start">2. Start address <small>AxADDR</small></label>
+   <div class="step"><button id="aminus" aria-label="Previous address">−</button><input type="text" id="start" value="0x0FF0" spellcheck="false" autocomplete="off"><button id="aplus" aria-label="Next address">+</button></div>
+   <div class="slide"><input type="range" id="slide" min="0" max="12287" step="1" aria-label="Drag the start address"><div class="ends"><span>0x0000</span><span>0x1000</span><span>0x2000</span><span>0x2FFF</span></div></div>
+   <div class="hint" id="starthint">Drag the slider to push the burst across 0x1000</div></div>
+  <div><label for="beatsn">3. Number of beats <small>AxLEN + 1</small></label>
+   <div class="step"><button id="bminus" aria-label="Fewer beats">−</button><input type="text" id="beatsn" inputmode="numeric" autocomplete="off"><button id="bplus" aria-label="More beats">+</button></div>
+   <div class="chips" id="bchips"></div><div class="hint" id="beatshint"></div></div>
+  <div><span class="lab">4. Bytes per beat <small>AxSIZE</small></span><div class="seg sm" id="size">
+   <button data-v="1">1</button><button data-v="2">2</button><button data-v="4">4</button><button data-v="8">8</button><button data-v="16">16</button><button data-v="32">32</button><button data-v="64">64</button><button data-v="128">128</button></div></div>
+ </div>
+ <div><span class="lab">Or load a ready-made scenario</span><div class="chips" id="presets"></div></div>
+</div>
+<div class="viz">
+ <div id="verdict"></div>
+ <div class="stats" id="stats"></div>
+ <h3>Address map: each 4 KB page belongs to a different slave</h3>
+ <div class="strip" id="strip"></div>
+ <div class="ticks" id="ticks"></div>
+ <div class="zoom"><h3>Zoomed in: every beat</h3><div class="cells" id="cells"></div></div>
+</div>
+</div></div>
+<div class="wrap" style="margin-top:24px">
+ <div class="two">
+  <div><h3>The check, worked for this burst</h3><div class="calc" id="calc"></div></div>
+  <div><h3>How a master makes it legal: split at the boundary</h3><div class="scroll"><table id="split"><thead><tr><th scope="col">Burst</th><th scope="col">AxADDR</th><th scope="col" class="n">AxLEN</th><th scope="col" class="n">Beats</th><th scope="col">Covers</th></tr></thead><tbody></tbody></table></div><p class="hint" id="splitnote" style="margin-top:8px"></p></div>
+ </div>
+</div>
+</section>
+
+<section class="band alt" id="what"><div class="wrap">
+<h2>What the 4 KB boundary is</h2>
+<p>4 KB is 4096 bytes, or 0x1000. A <strong>4 KB boundary</strong> is any address whose low 12 bits are zero: 0x0000, 0x1000, 0x2000, 0xABC000. The bytes between two boundaries form one 4 KB page. The rule says <strong>no burst may cross from one page into the next</strong>: every byte it touches must share the same upper address bits, AxADDR[31:12].</p>
+<p>The slave, not the master, computes the addresses after the first beat. AXI therefore needs a guarantee that those addresses stay where the first one was decoded.</p>
+<div class="why">
+ <div><h3>1. Decode happens once</h3><p>The interconnect looks only at AxADDR to pick a slave, then sends the whole burst there. The smallest address region a slave is given is 4 KB. If a burst crossed, its later beats would go to the slave that owns the start address, not the one that owns the bytes.</p></div>
+ <div><h3>2. Simpler slaves</h3><p>Because a burst never crosses, a slave's address incrementer only has to handle the low 12 bits; the upper bits stay fixed for the whole burst. Interconnect and slave logic both get smaller and faster.</p></div>
+ <div><h3>3. Pages match the MMU</h3><p>Often taught as well: 4 KB is the smallest page size in most MMUs. Two neighbouring pages can map to different physical memory or have different permissions and attributes. A burst staying in one page keeps one translation and one set of attributes.</p></div>
+</div>
+</div></section>
+
+<section class="band" id="types"><div class="wrap">
+<h2>Which bursts can cross</h2>
+<div class="scroll"><table class="types">
+<thead><tr><th scope="col">Burst</th><th scope="col">Can it cross?</th><th scope="col">Why</th></tr></thead>
+<tbody>
+<tr><td>INCR</td><td>Yes, and that's illegal, so the master must prevent it</td><td>Up to 256 beats of 128 bytes is 32 KB. Any INCR whose end runs past the next 0x…000 address crosses</td></tr>
+<tr><td>WRAP</td><td>Never</td><td>The window is at most 16 beats × 128 bytes = 2 KB and starts at a multiple of its own size, so it always sits inside one page</td></tr>
+<tr><td>FIXED</td><td>Never</td><td>Every beat uses the same address, and one beat is at most 128 bytes aligned to its size</td></tr>
+</tbody></table></div>
+<p style="margin-top:14px">For an INCR, the biggest legal burst from a given start is the bytes left in the page: <span class="mono">0x1000 − AxADDR[11:0]</span>. Starting at 0x0F00 leaves 0x100 = 256 bytes, so 64 beats of 4 bytes or 16 beats of 16 bytes, and no more.</p>
+</div></section>
+
+<section class="band alt" id="quiz"><div class="wrap">
+<h2>Check yourself</h2>
+<div class="quiz" id="qz"></div>
+</div></section>
+
+<section class="band" id="dv"><div class="wrap">
+<h2>DV corner: assert it, constrain it, test the edges</h2>
+<div class="two">
+<div><h3>Assertion on the AW channel (same for AR)</h3><div class="code"><button data-copy="c1">Copy</button><pre id="c1">// Last byte of an INCR burst stays in the start page
+logic [ADDR_W-1:0] aw_aligned, aw_last;
+assign aw_aligned = awaddr &amp; ~((ADDR_W'(1) &lt;&lt; awsize) - 1);
+assign aw_last    = aw_aligned + ((awlen + 1) &lt;&lt; awsize) - 1;
+
+a_aw_4kb: assert property (@(posedge aclk) disable iff (!aresetn)
+  (awvalid &amp;&amp; awburst == 2'b01) |-&gt;
+    aw_last[ADDR_W-1:12] == awaddr[ADDR_W-1:12])
+  else `uvm_error("AXI4KB", $sformatf(
+    "INCR from 0x%0h to 0x%0h crosses 4KB", awaddr, aw_last))</pre></div></div>
+<div><h3>Constraint in the sequence item</h3><div class="code"><button data-copy="c2">Copy</button><pre id="c2">// Keep random INCR bursts legal
+constraint c_4kb {
+  (burst == INCR) -&gt;
+    ((addr &amp; ~((1 &lt;&lt; size) - 1)) % 4096)
+      + ((len + 1) &lt;&lt; size) &lt;= 4096;
+}
+// For negative tests, turn it off:
+//   item.c_4kb.constraint_mode(0);</pre></div>
+<h3>Edge cases to cover</h3>
+<p>A burst that ends exactly on the last byte of a page (legal), one that crosses by one beat, unaligned INCR starts near 0x…FFF, every AxSIZE at the page end, 256-beat bursts, and WRAP and FIXED bursts placed at 0x…FF0 to prove they never fire the check.</p></div>
+</div>
+<footer style="margin-top:24px">Part of the AXI4 interactive series: page 5.</footer>
+</div></section>
+
+<script>
+{
+const st={type:'INCR',start:0x0FF0,beats:8,size:4};
+const $=id=>document.getElementById(id);
+const hex=(v,w=4)=>'0x'+v.toString(16).toUpperCase().padStart(w,'0');
+const P=[
+ {n:'Legal, mid-page',s:{type:'INCR',start:0x0400,beats:16,size:4}},
+ {n:'Ends exactly at 0x0FFF',s:{type:'INCR',start:0x0FC0,beats:16,size:4}},
+ {n:'Crosses by 2 beats',s:{type:'INCR',start:0x0FF8,beats:4,size:4}},
+ {n:'Big DMA burst',s:{type:'INCR',start:0x0800,beats:256,size:16}},
+ {n:'Unaligned near the end',s:{type:'INCR',start:0x0FFE,beats:2,size:4}},
+ {n:'WRAP at 0x0FF0',s:{type:'WRAP',start:0x0FF0,beats:4,size:4}},
+ {n:'FIXED at 0x0FFC',s:{type:'FIXED',start:0x0FFC,beats:16,size:4}}
+];
+$('presets').innerHTML=P.map((p,i)=>`<button data-i="${i}">${p.n}</button>`).join('');
+
+function beats(){
+ const nb=st.size,N=st.beats,total=nb*N,al=Math.floor(st.start/nb)*nb,wb=Math.floor(st.start/total)*total,b=[];
+ for(let i=0;i<N;i++){
+  let a;
+  if(st.type==='FIXED')a=st.start;
+  else if(st.type==='INCR')a=i?al+i*nb:st.start;
+  else a=i?wb+((al-wb+i*nb)%total):st.start;
+  const alN=(i===0||st.type==='FIXED')?Math.floor(a/nb)*nb:a;
+  b.push({a,last:alN+nb-1});
+ }
+ const lo=st.type==='WRAP'?wb:st.start;
+ const hi=st.type==='WRAP'?wb+total-1:st.type==='FIXED'?al+nb-1:al+total-1;
+ return {b,nb,N,total,al,lo,hi};
+}
+
+function render(){
+ const r=beats(),{b,nb,N,al,lo,hi}=r;
+ for(const [id,v] of [['type',st.type],['size',String(st.size)]])for(const x of $(id).children)x.setAttribute('aria-pressed',x.dataset.v===v);
+ $('typedesc').textContent=$('type').querySelector(`[data-v=${st.type}] span`).textContent+'.';
+ if(document.activeElement!==$('beatsn'))$('beatsn').value=N;
+ if(document.activeElement!==$('start'))$('start').value=hex(st.start);
+ const okB=st.type==='WRAP'?[2,4,8,16]:st.type==='FIXED'?[1,2,4,8,16]:[1,4,8,16,64,256];
+ $('bchips').innerHTML=okB.map(v=>`<button data-v="${v}" aria-pressed="${v===N}">${v}</button>`).join('');
+ $('beatshint').textContent=`AxLEN = ${N-1}. `+(st.type==='WRAP'?'WRAP allows only 2, 4, 8 or 16.':st.type==='FIXED'?'FIXED allows 1 to 16.':'INCR allows 1 to 256 (AXI4).');
+ $('slide').step=1;$('slide').value=Math.min(st.start,12287);
+ const p0=Math.floor(st.start/4096),pe=Math.floor(hi/4096),cross=pe!==Math.floor(lo/4096);
+ const bnd=(Math.floor(lo/4096)+1)*4096;
+ const left=4096-(st.start%4096);
+ const maxBeats=Math.max(0,Math.floor((4096-(al%4096))/nb));
+ const w=Math.max(4,hi.toString(16).length);
+ $('verdict').innerHTML=cross
+  ?`<div class="verdict bad"><strong>Illegal: crosses the 4 KB boundary at ${hex(bnd,w)}</strong><p>${b.filter(x=>Math.floor(x.a/4096)!==p0).length} of ${N} beats land in the next page. The interconnect already routed this burst by ${hex(st.start,w)}, so those beats would go to the wrong slave.</p></div>`
+  :`<div class="verdict ok"><strong>Legal: stays inside page ${hex(p0*4096,w)}–${hex(p0*4096+4095,w)}</strong><p>${st.type==='INCR'?`${hi-lo+1} bytes used, ${left-(hi-st.start+1)} bytes to spare before ${hex(bnd,w)}.`:st.type==='WRAP'?`A WRAP window of ${r.total} bytes is aligned to its own size, so it can never reach the next page.`:'Every FIXED beat hits the same address, so the burst never moves.'}</p></div>`;
+ $('stats').innerHTML=[['Start',hex(st.start,w)],['Last byte',hex(hi,w)],['Bytes in burst',st.type==='FIXED'?`${nb} × ${N}`:hi-lo+1],['Left in page',left],['Max INCR beats here',maxBeats]].map(([k,v])=>`<div class="stat"><span>${k}</span><strong>${v}</strong></div>`).join('');
+ // page strip
+ let f=Math.max(0,Math.min(p0,pe)-(p0===pe?0:0)),l=Math.max(p0,pe);
+ if(l-f<1){if(st.start%4096>2048)l=f+1;else{f=Math.max(0,f-1);if(f===p0)l=f+1}}
+ if(l-f>3)l=f+3;
+ const pages=[];for(let p=f;p<=l;p++)pages.push(p);
+ const S=f*4096,E=(l+1)*4096,span=E-S;
+ const letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+ $('strip').style.setProperty('--p',pages.length);$('ticks').style.setProperty('--p',pages.length);
+ const clip=v=>Math.min(Math.max(v,S),E);
+ const x0=(clip(lo)-S)/span*100,x1=(clip(hi+1)-S)/span*100,xb=(clip(bnd)-S)/span*100;
+ const width=Math.max(x1-x0,3);
+ const frac=cross?(bnd-lo)/(hi+1-lo):1,inW=frac*100;
+ const left0=cross?Math.max(0,xb-width*frac):Math.max(0,Math.min(x0,x1-width));
+ $('strip').innerHTML=pages.map(p=>`<div class="pg"><b>Slave ${letters[p%26]}</b><span>${hex(p*4096,w)}–${hex(p*4096+4095,w)}</span></div>`).join('')+
+  `<div class="bar" style="left:${left0}%;width:${width}%"><i class="in" style="width:${inW}%"></i>${cross?`<i class="out" style="width:${100-inW}%"></i>`:''}</div>`;
+ $('ticks').innerHTML=pages.map(p=>`<span>${hex(p*4096,w)}</span>`).join('');
+ // beats zoom
+ let idx=b.map((x,i)=>i);
+ const firstOut=b.findIndex(x=>Math.floor(x.a/4096)!==p0);
+ if(N>24){const k=firstOut>0?firstOut:N;const keep=new Set([0,1,2,k-3,k-2,k-1,k,k+1,k+2,N-2,N-1].filter(i=>i>=0&&i<N));idx=[...keep].sort((a,c)=>a-c)}
+ let html='',prev=-1;
+ for(const i of idx){
+  if(i-prev>1)html+=`<div class="cell skip">…</div>`;
+  if(i===firstOut&&firstOut>0)html+=`<div class="kbmark" aria-label="4 KB boundary"></div>`;
+  const x=b[i],out=Math.floor(x.a/4096)!==p0;
+  html+=`<div class="cell${out?' x':''}"><small>beat ${i}</small>${hex(x.a,w)}</div>`;
+  prev=i;
+ }
+ $('cells').innerHTML=html;$('cells').classList.toggle('hasmark',firstOut>0);
+ // worked check
+ const bits=v=>hex(Math.floor(v/4096),Math.max(1,w-3));
+ $('calc').innerHTML=st.type!=='INCR'
+  ?`${st.type} burst: the check is not needed.<br>${st.type==='WRAP'?`window = ${N} × ${nb} = <b>${r.total}</b> bytes at ${hex(lo,w)}, aligned to ${r.total}`:`all ${N} beats at <b>${hex(st.start,w)}</b>`}<br>last byte = <b>${hex(hi,w)}</b>, same page as the start`
+  :`aligned start = ${hex(st.start,w)} &amp; ~(${nb}−1) = <b>${hex(al,w)}</b><br>bytes = (AxLEN+1) × ${nb} = ${N} × ${nb} = <b>${N*nb}</b><br>last byte = ${hex(al,w)} + ${N*nb} − 1 = <b>${hex(hi,w)}</b><br>start[31:12] = ${bits(st.start)} &nbsp; last[31:12] = ${bits(hi)}<br>${cross?`<span class="bad">different → crosses 4 KB → illegal</span>`:'equal → same page → legal'}`;
+ // split
+ let rows=[];
+ if(st.type==='INCR'){let cur=null;b.forEach((x,i)=>{const pg=Math.floor(x.a/4096);if(!cur||cur.pg!==pg){cur={pg,a:x.a,n:0,end:0};rows.push(cur)}cur.n++;cur.end=x.last})}
+ else rows=[{a:st.start,n:N,end:hi}];
+ $('split').tBodies[0].innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td><span class="mono">${hex(x.a,w)}</span></td><td class="n">${x.n-1}</td><td class="n">${x.n}</td><td><span class="mono">${hex(x.a,w)}–${hex(x.end,w)}</span></td></tr>`).join('');
+ $('splitnote').textContent=rows.length>1?`Split into ${rows.length} legal INCR bursts. The second one starts exactly on ${hex(bnd,w)}, aligned, and the data is unchanged.`:'Already legal, nothing to split.';
+}
+
+const parse=v=>{v=v.trim();const x=/^0x/i.test(v)?parseInt(v,16):/^[0-9]+$/.test(v)?parseInt(v,10):parseInt(v,16);return Number.isFinite(x)&&x>=0&&x<=0xFFFFFFFF?x:null};
+$('start').addEventListener('input',e=>{const x=parse(e.target.value);$('starthint').textContent=x===null?'Not a valid address: try 0x0FF0':'Drag the slider to push the burst across 0x1000';if(x!==null){st.start=x;render()}});
+$('start').addEventListener('blur',render);$('beatsn').addEventListener('blur',render);
+$('slide').addEventListener('input',e=>{st.start=Math.floor(+e.target.value/st.size)*st.size;render()});
+$('aminus').addEventListener('click',()=>{st.start=Math.max(0,st.start-st.size);render()});
+$('aplus').addEventListener('click',()=>{st.start=Math.min(0xFFFFFFFF,st.start+st.size);render()});
+$('beatsn').addEventListener('input',e=>{const v=parseInt(e.target.value,10);if(v>=1&&v<=256){st.beats=v;render()}});
+const WR=[2,4,8,16];
+const bump=d=>{if(st.type==='WRAP'){const i=WR.findIndex(v=>v>=st.beats);let j=(i<0?3:i)+(d>0&&WR[i]===st.beats?1:d>0?0:-1);st.beats=WR[Math.max(0,Math.min(3,j))]}else st.beats=Math.max(1,Math.min(256,st.beats+d));render()};
+$('bminus').addEventListener('click',()=>bump(-1));$('bplus').addEventListener('click',()=>bump(1));
+$('bchips').addEventListener('click',e=>{const v=e.target.closest('button')?.dataset.v;if(!v)return;st.beats=+v;render()});
+for(const id of ['type','size'])$(id).addEventListener('click',e=>{const v=e.target.closest('button')?.dataset.v;if(!v)return;st[id]=id==='size'?+v:v;render()});
+$('presets').addEventListener('click',e=>{const i=e.target.closest('button')?.dataset.i;if(i===undefined)return;Object.assign(st,P[i].s);render()});
+
+const Q=[
+ ['Which of these addresses is a 4 KB boundary?',['0x0FFF','0x2000','0x1800','0x1100'],1,'A boundary has its low 12 bits all zero. 0x2000 qualifies; 0x1800 is only a 2 KB boundary.'],
+ ['INCR, 4-byte beats, 16 beats, start 0x0FC0. Legal?',['Yes, it ends exactly at 0x0FFF','No, it crosses at 0x1000'],0,'16 × 4 = 64 bytes = 0x40. 0x0FC0 + 0x40 − 1 = 0x0FFF, the last byte of the page.'],
+ ['Can a WRAP burst ever cross a 4 KB boundary?',['Yes, if it starts near 0x…FFF','No, its window is at most 2 KB and aligned to its own size','Only in AXI3'],1,'16 beats × 128 bytes = 2 KB at most, aligned to that size, so the window always fits inside a page.'],
+ ['An INCR starts at 0x1F00 with 16-byte beats. What is the largest legal AxLEN?',['255','15','16','31'],1,'0x2000 − 0x1F00 = 0x100 = 256 bytes. 256 / 16 = 16 beats, so AxLEN = 15.'],
+ ['Who calculates the addresses of beats after the first one?',['The master drives a new AxADDR per beat','The slave, from AxADDR, AxLEN, AxSIZE and AxBURST','The interconnect re-decodes each beat'],1,'Only one address is sent. That is why the burst must stay in the region that address was decoded into.']
+];
+$('qz').innerHTML=Q.map((q,i)=>`<div class="q" data-q="${i}"><p>${q[0]}</p><div class="opts">${q[1].map((o,j)=>`<button data-j="${j}">${o}</button>`).join('')}</div><div class="ex" hidden>${q[3]}</div></div>`).join('');
+$('qz').addEventListener('click',e=>{const bt=e.target.closest('button');if(!bt)return;const box=bt.closest('.q'),q=Q[box.dataset.q];for(const x of box.querySelectorAll('button'))x.classList.remove('right','wrong');bt.classList.add(+bt.dataset.j===q[2]?'right':'wrong');box.querySelectorAll('button')[q[2]].classList.add('right');box.querySelector('.ex').hidden=false});
+document.addEventListener('click',e=>{const id=e.target.dataset?.copy;if(!id)return;const t=$(id).textContent;navigator.clipboard?.writeText(t).then(()=>{e.target.textContent='Copied'},()=>{e.target.textContent='Select & copy'}).finally(()=>setTimeout(()=>e.target.textContent='Copy',1600))});
+render();
+}
+</script>
+<script>{const s=document.querySelector('.series'),t=document.querySelector('nav.toc');if(s){const home=s.querySelector('.home');const ph=document.createElement('span');ph.className='sh';ph.textContent='Pages';home.after(ph);if(t){const h=document.createElement('span');h.className='sh';h.textContent='On this page';s.appendChild(h);for(const a of t.querySelectorAll('a')){if(!(a.getAttribute('href')||'').startsWith('#'))continue;const c=a.cloneNode(true);c.className='sec';c.removeAttribute('id');s.appendChild(c)}}}}</script>
+</body>
+</html>

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="AXI4 basics: the five channels, the VALID/READY handshake, IDs and ordering, with interactive demos.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%277%27 fill=%27%23060a14%27/%3E%3Cpath d=%27M6 10h20M6 16h20M6 22h20%27 stroke=%27%2322d3ee%27 stroke-width=%273%27 stroke-linecap=%27round%27/%3E%3C/svg%3E">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AXI4 Basics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE everyday learning for a first-timer, exact enough for an engineer
+   IDEA the block diagram from the spec: a master and a slave joined by five one-way channels
+   PICTURE live channel diagram where parcels (address, data, response) travel each channel
+   COLOUR white / ink, ultramarine for master-to-slave, teal-free: red only for errors and rule breaks; night #0d0e18
+   TYPE Spectral 600 headings + Inter text, JetBrains Mono for signals
+   LAYOUT each section: controls on top, the working picture under them, plain text beside or below */
+:root{color-scheme:light dark;--bg:light-dark(#ffffff,#0d0e18);--ink:light-dark(#14110f,#e8e9f3);--mut:light-dark(#596075,#9ba1b8);--rule:light-dark(#dde0ea,#272b40);--u:light-dark(#1d2bd8,#7f8aff);--uink:light-dark(#ffffff,#0d0e18);--tint:light-dark(#eef0fe,#161a3a);--panel:light-dark(#f6f7fb,#13152b);--back:light-dark(#0b6b4f,#4fd1a5);--backt:light-dark(#e6f4ef,#10291f);--red:light-dark(#cf1f2b,#ff6d6d);--redt:light-dark(#fdecee,#3a1418)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html{scroll-padding-top:16px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Inter,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(28px,4vw,56px) max(5vw,16px)}
+.wrap{max-width:1240px;margin:0 auto}
+.alt{background:var(--panel);border-block:1px solid var(--rule)}
+h1,h2{font-family:Spectral,Georgia,serif;font-weight:600;line-height:1.08;letter-spacing:-.02em;text-wrap:balance;margin:0}
+h1{font-size:clamp(34px,4.6vw,50px)}
+h2{font-size:clamp(26px,3vw,34px);margin-bottom:10px}
+h3{font-size:17px;margin:0 0 6px}
+p{margin:0 0 12px;max-width:70ch}
+.lede{color:var(--mut);font-size:17px;margin-top:10px}
+.mono,code{font-family:"JetBrains Mono",ui-monospace,monospace}
+code{font-size:.92em;background:var(--tint);padding:1px 5px;border-radius:4px}
+nav.toc{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:16px;font-size:15px}
+nav.toc a,a.go{color:var(--u);text-decoration:none;border-bottom:1px solid color-mix(in srgb,var(--u) 35%,transparent)}
+.spec{font-size:13px;color:var(--mut);margin-top:-4px;margin-bottom:12px}
+button{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--rule);border-radius:8px;min-height:44px;padding:0 14px;cursor:pointer}
+button:hover{border-color:var(--u)}
+button:focus-visible{outline:3px solid color-mix(in srgb,var(--u) 50%,transparent);outline-offset:2px}
+button[aria-pressed=true]{background:var(--u);color:var(--uink);border-color:var(--u)}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+.bar .lab{font-size:14px;font-weight:600;margin-right:4px}
+.hint{font-size:14px;color:var(--mut)}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:13px;color:var(--mut);font-weight:600}
+td .mono,td.mono{white-space:nowrap}
+/* channel diagram */
+.chan{display:grid;grid-template-columns:120px minmax(0,1fr) 120px;gap:0 14px;align-items:stretch;margin-top:6px}
+.ends{display:none}
+.node{border:2px solid var(--ink);border-radius:12px;display:grid;place-items:center;text-align:center;padding:10px;font-weight:700;font-size:18px;background:var(--bg)}
+.node small{display:block;font-weight:500;font-size:13px;color:var(--mut)}
+.lanes{display:grid;gap:8px}
+.lane{position:relative;height:78px;border-radius:8px;background:var(--panel);border:1px solid var(--rule);overflow:hidden}
+.lane::after{content:"";position:absolute;left:12px;right:12px;top:55px;border-top:2px dashed var(--rule)}
+.lane.on{border-color:var(--u);background:var(--tint)}
+.lane.bk.on{border-color:var(--back);background:var(--backt)}
+.lane .nm{position:absolute;left:12px;top:6px;font:600 14px "JetBrains Mono",monospace}
+.lane .sg{position:absolute;left:12px;top:26px;font-size:13px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;right:12px}
+.lane .ar{position:absolute;right:12px;top:6px;font-size:13px;font-weight:600;color:var(--u)}
+.lane.bk .ar{color:var(--back)}
+.lane .ct{position:absolute;right:130px;top:7px;font:13px "JetBrains Mono",monospace;color:var(--mut)}
+.pkt{position:absolute;top:42px;left:0;z-index:1;height:28px;padding:0 10px;border-radius:15px;background:var(--u);color:var(--uink);font:600 13px "JetBrains Mono",monospace;display:grid;place-items:center;white-space:nowrap;opacity:0;pointer-events:none}
+.bk .pkt{background:var(--back)}
+.cap{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:14px}
+.capb{border-left:3px solid var(--u);padding:4px 0 4px 12px;min-height:76px}
+.capb.r{border-color:var(--back)}
+.capb b{display:block;font-size:14px}
+.capb span{font-size:15px}
+.analogy{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:20px}
+.analogy div{border-top:2px solid var(--ink);padding-top:8px}
+/* waveform */
+.wave{display:grid;grid-template-columns:72px repeat(10,minmax(36px,1fr));gap:0;margin-top:8px;min-width:480px}
+.wave .lb{font:600 14px "JetBrains Mono",monospace;align-self:center;padding-right:6px}
+.wave .cy{text-align:center;font-size:13px;color:var(--mut);padding-bottom:4px}
+.wv{position:relative;height:40px;border:0;border-radius:0;background:none;padding:0;min-height:0;border-left:1px dashed var(--rule)}
+.wv::after{content:"";position:absolute;left:0;right:0;bottom:7px;border-top:3px solid currentColor}
+.wv.h::after{bottom:auto;top:7px}
+.wv.e::before{content:"";position:absolute;left:-1px;top:7px;bottom:7px;border-left:3px solid currentColor}
+.wv.v{color:var(--u)}.wv.r{color:var(--back)}
+.wv:hover{background:var(--tint)}
+.wv.x{background:var(--redt)}
+.clk{height:34px;border-left:1px dashed var(--rule);color:var(--mut)}
+.clk svg{width:100%;height:100%;display:block}
+.dat{height:34px;border-left:1px dashed var(--rule);display:grid;place-items:center;font:13px "JetBrains Mono",monospace}
+.dat i{font-style:normal;border:1.5px solid var(--ink);border-radius:10px;padding:2px 8px}
+.tf{height:30px;display:grid;place-items:center;border-left:1px dashed var(--rule);font-size:13px;font-weight:700;color:var(--back)}
+.col-t{background:var(--backt)}
+.verdict{border-radius:10px;padding:12px 14px;margin-top:14px;background:var(--tint)}
+.verdict.bad{background:var(--redt)}
+.verdict.bad strong{color:var(--red)}
+/* rules */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;counter-reset:r}
+.rules div{border:1px solid var(--rule);border-radius:10px;padding:14px;background:var(--bg)}
+.rules h3::before{counter-increment:r;content:counter(r) ". ";color:var(--u)}
+.rules p{font-size:15px;margin:0}
+.rules .spec{margin:8px 0 0}
+/* bursts */
+.bursts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:12px}
+.bt{border:1px solid var(--rule);border-radius:10px;padding:14px}
+.bt .addrs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.bt .addrs span{font:13px "JetBrains Mono",monospace;background:var(--u);color:var(--uink);border-radius:6px;padding:4px 8px}
+.bt .addrs span.w{background:var(--back)}
+.bt p{font-size:15px;margin:0}
+/* ids */
+.tline{display:grid;gap:10px;margin-top:10px}
+.tr{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;align-items:center}
+.tr .nm{font-size:14px;font-weight:600}
+.track{position:relative;height:34px;background:var(--panel);border:1px solid var(--rule);border-radius:6px}
+.seg{position:absolute;top:4px;bottom:4px;border-radius:4px;font:600 12px "JetBrains Mono",monospace;display:grid;place-items:center;color:var(--uink);overflow:hidden;white-space:nowrap;transition:left .4s,width .4s}
+.seg.wait{background:color-mix(in srgb,var(--u) 25%,var(--bg));color:var(--ink)}
+.seg.blk{background:repeating-linear-gradient(45deg,var(--redt) 0 6px,transparent 6px 12px);color:var(--red);border:1px dashed var(--red)}
+.seg.done{background:var(--back)}
+.axis{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;font:12px "JetBrains Mono",monospace;color:var(--mut)}
+.axis div{display:flex;justify-content:space-between}
+/* signal tabs */
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+/* quiz */
+.quiz{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:16px}
+.q{border:1px solid var(--rule);border-radius:10px;padding:14px;background:var(--bg)}
+.q p{font-weight:600}
+.q .opts{display:grid;gap:6px}
+.q button{text-align:left}
+.q button.right{background:var(--backt);border-color:var(--back)}
+.q button.wrong{background:var(--redt);border-color:var(--red)}
+.q .ex{font-size:14px;color:var(--mut);margin-top:8px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:14px}
+.card{border:1px solid var(--rule);border-radius:10px;padding:14px;background:var(--bg)}
+.card b.mono{font-size:17px}
+.card p{font-size:15px;margin:6px 0 0}
+footer{color:var(--mut);font-size:14px}
+@media(max-width:820px){.bursts,.two{grid-template-columns:minmax(0,1fr)}.cap{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:600px){.chan{grid-template-columns:minmax(0,1fr)}.node{display:none}.ends{display:flex;justify-content:space-between;font-weight:700;margin-bottom:6px}.lane .sg{display:none}.lane{height:64px}.lane::after{top:44px}.pkt{top:31px;height:26px}.lane .ct{right:auto;left:12px;top:auto;bottom:-100px}table{font-size:13px}th,td{padding:6px 4px}.tr,.axis{grid-template-columns:80px minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.seg{transition:none}}
+.series{display:flex;align-items:center;gap:4px;overflow-x:auto;padding:8px max(5vw,16px);border-bottom:1px solid var(--rule);background:var(--bg);font-size:14px;white-space:nowrap}
+.series a{flex:none;color:var(--ink);text-decoration:none;padding:0 12px;border-radius:8px;min-height:40px;display:inline-flex;align-items:center}
+.series a:hover{background:var(--tint)}
+.series a[aria-current=page]{background:var(--u);color:var(--uink);font-weight:600}
+.series .home{font-weight:700;margin-right:6px;border:1px solid var(--rule)}
+
+/* series dark theme, matches the home page */
+:root,:root[data-theme=light],:root[data-theme=dark]{color-scheme:dark;--bg:#060a14;--ink:#e7eef9;--mut:#8fa2c2;--rule:#1f2c47;--u:#22d3ee;--uink:#060a14;--tint:#0f1b30;--panel:#0c1424;--red:#f87171;--redt:#3a1418;--back:#34d399;--backt:#0e2a22}
+body{background-color:#060a14;background-image:radial-gradient(ellipse 90% 520px at 50% 0,rgba(18,48,90,.85),transparent 75%),linear-gradient(rgba(59,130,246,.07) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,.07) 1px,transparent 1px);background-size:auto,50px 50px,50px 50px}
+h1,h2{font-family:Inter,system-ui,sans-serif;font-weight:800;letter-spacing:-.025em}
+h1{background:linear-gradient(90deg,#22d3ee,#a78bfa 55%,#fbbf24);-webkit-background-clip:text;background-clip:text;color:transparent;padding-bottom:4px}
+.alt{background:rgba(12,20,36,.72);border-color:#1f2c47}
+.series{background:rgba(6,10,20,.88);backdrop-filter:blur(6px)}
+.series a[aria-current=page]{background:linear-gradient(90deg,#22d3ee,#a78bfa);color:#060a14}
+button[aria-pressed=true]{background:#22d3ee;color:#060a14}
+button{background:#0c1424}
+input[type=text]{background:#0c1424}
+pre{background:#0a1120}
+.stat{border-top-color:#2a3b5e}
+nav.toc a,a.go{color:#7dd3fc}
+.node{background:#4338ca;border-color:#6366f1;color:#fff}.chan>.node:last-child{background:#047857;border-color:#10b981}.node small{color:#e2e8f0}
+
+/* clear, colour-coded controls */
+button:not(.wv){background:#13213a;border:1.5px solid #34507f;color:#e7eef9;font-weight:600;cursor:pointer;box-shadow:0 3px 0 #04070f,inset 0 1px 0 rgba(255,255,255,.07);transition:transform .12s,border-color .12s,box-shadow .12s,background .12s}
+button:not(.wv):hover{border-color:#22d3ee;background:#17305a;box-shadow:0 3px 0 #04070f,0 0 0 3px rgba(34,211,238,.2);transform:translateY(-1px)}
+button:not(.wv):active{transform:translateY(2px);box-shadow:0 1px 0 #04070f}
+button:not(.wv):focus-visible{outline:3px solid #67e8f9;outline-offset:2px}
+button[aria-pressed=true]:not(.wv),button[aria-pressed=true]:not(.wv):hover{background:linear-gradient(135deg,#22d3ee,#38bdf8);border-color:#a5f3fc;color:#060a14;box-shadow:0 3px 0 #0e7490,0 0 18px rgba(34,211,238,.35)}
+button[aria-pressed=true] span{color:#0b2540!important;opacity:1!important}
+#play,#goW,#goR,#goWR{background:linear-gradient(135deg,#a78bfa,#22d3ee);border-color:#c4b5fd;color:#060a14;font-weight:800;box-shadow:0 3px 0 #4c1d95,0 0 16px rgba(167,139,250,.35)}
+#play:hover,#goW:hover,#goR:hover,#goWR:hover{background:linear-gradient(135deg,#c4b5fd,#67e8f9);border-color:#fff}
+#presets button,#hsp button{background:rgba(251,191,36,.1);border-color:#b7791f;color:#fde68a;box-shadow:0 3px 0 #3d2a05}
+#presets button:hover,#hsp button:hover{background:rgba(251,191,36,.2);border-color:#fbbf24;box-shadow:0 3px 0 #3d2a05,0 0 0 3px rgba(251,191,36,.22)}
+.q button{border-color:#5b4a9e;background:#161a3a}
+.q button:hover{border-color:#a78bfa;box-shadow:0 3px 0 #04070f,0 0 0 3px rgba(167,139,250,.22)}
+.q button.right{background:#0e2a22;border-color:#34d399;color:#d1fae5}
+.q button.wrong{background:#3a1418;border-color:#f87171;color:#fee2e2}
+.step button{font-size:24px;font-weight:700;color:#67e8f9}
+nav.toc a{border:1.5px solid #2a3b5e;border-radius:999px;padding:6px 14px;background:rgba(19,33,58,.7);color:#bae6fd;font-weight:600;font-size:14px;transition:border-color .12s,background .12s}
+nav.toc a:hover{border-color:#22d3ee;background:#17305a;color:#fff}
+.series a:not([aria-current]){border:1px solid #1f2c47}
+.series a:not([aria-current]):hover{border-color:#22d3ee}
+.pager a{border:1.5px solid #34507f;border-radius:999px;padding:8px 16px;background:#13213a}
+.pager a:hover{border-color:#22d3ee}
+.wv{cursor:pointer}
+.wv:hover{background:rgba(34,211,238,.14)!important;outline:1.5px dashed #22d3ee;outline-offset:-3px}
+.code button{color:#bae6fd}
+input[type=text]{border:1.5px solid #34507f}
+input[type=text]:focus{border-color:#22d3ee;outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.2)}
+@media(prefers-reduced-motion:reduce){button:not(.wv){transition:none}button:not(.wv):hover{transform:none}}
+.key{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:14px;font-size:14px;color:#c7d2e6}
+.key span{display:inline-flex;align-items:center;gap:8px}
+.key i{display:inline-block;width:30px;height:18px;border-radius:6px;border:1.5px solid}
+.key .k1{background:linear-gradient(135deg,#a78bfa,#22d3ee);border-color:#c4b5fd}
+.key .k2{background:#13213a;border-color:#34507f}
+.key .k2s{background:linear-gradient(135deg,#22d3ee,#38bdf8);border-color:#a5f3fc}
+.key .k3{background:rgba(251,191,36,.12);border-color:#b7791f;border-radius:9px}
+.key .k4{background:rgba(19,33,58,.7);border-color:#2a3b5e;border-radius:9px}
+.bt .addrs span{background:transparent;color:#67e8f9;border:1.5px dashed #22d3ee}
+.bt .addrs span.w{background:transparent;color:#6ee7b7;border-color:#34d399}
+
+/* ===== v3: left sidebar, left control panels, unmistakable controls ===== */
+.series .sh,.series .sec{display:none}
+@media(min-width:1000px){
+ body{padding-left:256px}
+ .series{position:fixed;z-index:20;left:0;top:0;bottom:0;width:256px;flex-direction:column;align-items:stretch;gap:6px;overflow-y:auto;padding:18px 14px 24px;border-bottom:0;border-right:1px solid #1f2c47;white-space:normal;background:rgba(6,10,20,.97)}
+ .series a{min-height:46px;padding:0 14px;border-radius:12px;font-size:15px;background:#0c1424}
+ .series .home{justify-content:center;margin-bottom:4px;background:linear-gradient(135deg,rgba(34,211,238,.14),rgba(167,139,250,.14));border-color:#34507f}
+ .series .sh{display:block;font-size:12px;font-weight:700;color:#8fa2c2;letter-spacing:.06em;margin:14px 6px 2px}
+ .series a.sec{display:flex;min-height:36px;font-size:14px;font-weight:500;background:none;border-color:transparent;color:#bae6fd}
+ .series a.sec:hover{background:#0f1b30;border-color:#1f2c47}
+ nav.toc{display:none}
+}
+.demo{display:grid;gap:22px;align-items:start;margin-top:14px}
+@media(min-width:1000px){
+ .demo{grid-template-columns:320px minmax(0,1fr)}
+ .demo>.ctrl{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow-y:auto}
+ .demo .types{grid-template-columns:minmax(0,1fr)!important}
+ .demo .knobs{grid-template-columns:minmax(0,1fr)!important}
+ .demo .stage{grid-template-columns:minmax(0,1fr)!important}
+ .demo #presets{display:grid;gap:8px}
+ .demo #presets button{width:100%}
+ .demo .chan{grid-template-columns:92px minmax(0,1fr) 92px}
+}
+.ctrl{background:linear-gradient(180deg,#0f1c36,#0a1326)!important;border:1.5px solid #2c4475!important;border-radius:16px!important;padding:16px!important;display:grid;gap:16px;box-shadow:0 12px 32px rgba(0,0,0,.4);margin:0!important}
+.tryhd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px dashed #2c4475}
+.tryhd b{background:linear-gradient(135deg,#a78bfa,#22d3ee);color:#060a14;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:800}
+.tryhd span{font-size:13px;color:#a9b8d4}
+.ctrl .stack{display:grid;gap:10px}
+.ctrl .stack button{width:100%}
+/* every button */
+button:not(.wv){display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:12px;font-weight:700;background:linear-gradient(180deg,#1c3057,#111d38);border:1.5px solid #4064a3;color:#f1f6ff;cursor:pointer;box-shadow:0 4px 0 #03060d,0 8px 16px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.16);transition:transform .12s,box-shadow .12s,border-color .12s,background .12s}
+button:not(.wv):hover{border-color:#22d3ee;background:linear-gradient(180deg,#22457a,#16305a);box-shadow:0 4px 0 #03060d,0 0 0 3px rgba(34,211,238,.28),0 10px 24px rgba(34,211,238,.2);transform:translateY(-2px)}
+button:not(.wv):active{transform:translateY(3px);box-shadow:0 1px 0 #03060d}
+.types button{display:flex!important;flex-direction:column;align-items:flex-start!important;justify-content:center}
+.ctrl .stack button,.q button,#presets button,#hsp button{justify-content:flex-start;text-align:left}
+/* option buttons get a radio dot */
+.types button,.seg button,.tabs button,#idS,#idD,#bchips button,#tmode button,#tdir button{position:relative;padding-left:38px!important}
+.types button::before,.seg button::before,.tabs button::before,#idS::before,#idD::before,#bchips button::before,#tmode button::before,#tdir button::before{content:"";position:absolute;left:13px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;border:2.5px solid #67e8f9;box-sizing:border-box;box-shadow:0 0 8px rgba(103,232,249,.45)}
+#bchips button{padding-left:30px!important}
+#bchips button::before{left:9px;width:13px;height:13px;margin-top:-6.5px;border-width:2px}
+button[aria-pressed=true]:not(.wv),button[aria-pressed=true]:not(.wv):hover{background:linear-gradient(135deg,#22d3ee,#60a5fa)!important;color:#04101f!important;border-color:#cffafe!important;box-shadow:0 4px 0 #0e7490,0 0 24px rgba(34,211,238,.5)!important}
+button[aria-pressed=true]::before{border-color:#04101f!important;background:radial-gradient(circle,#04101f 0 38%,transparent 42%)!important;box-shadow:none!important}
+button[aria-pressed=true] span{color:#0b2540!important;opacity:1!important}
+/* action buttons */
+#play,#goW,#goR,#goWR{background:linear-gradient(135deg,#7c3aed,#0e7490)!important;color:#fff!important;border:1.5px solid #c4b5fd!important;font-weight:800;text-shadow:0 1px 2px rgba(0,0,0,.4);box-shadow:0 4px 0 #2e1065,0 0 22px rgba(139,92,246,.5)!important;animation:axpulse 2.4s ease-in-out 3}
+#play:hover,#goW:hover,#goR:hover,#goWR:hover{background:linear-gradient(135deg,#8b5cf6,#0891b2)!important;border-color:#fff!important}
+@keyframes axpulse{50%{box-shadow:0 4px 0 #2e1065,0 0 0 8px rgba(139,92,246,.2),0 0 30px rgba(34,211,238,.55)}}
+/* example loaders */
+#presets button,#hsp button{background:linear-gradient(180deg,#3d2c06,#271c03)!important;border-color:#d97706!important;color:#fde68a!important;box-shadow:0 4px 0 #120c01,inset 0 1px 0 rgba(253,230,138,.18)!important}
+#presets button::before,#hsp button::before{content:"▸";color:#fbbf24;font-size:14px}
+#presets button:hover,#hsp button:hover{border-color:#fbbf24!important;box-shadow:0 4px 0 #120c01,0 0 0 3px rgba(251,191,36,.28)!important}
+/* steppers */
+.step button{font-size:26px!important;color:#67e8f9!important;padding:0!important}
+/* quiz answers with letter badges */
+.q .opts{counter-reset:o}
+.q button{background:linear-gradient(180deg,#241e52,#18143d)!important;border-color:#7262d6!important}
+.q button::before{counter-increment:o;content:counter(o,upper-alpha);flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#a78bfa;color:#0b0820;font-size:13px;font-weight:800}
+.q button.right{background:linear-gradient(180deg,#0f3d2e,#0a2a20)!important;border-color:#34d399!important}
+.q button.right::before{content:"✓";background:#34d399}
+.q button.wrong{background:linear-gradient(180deg,#4d161d,#330f16)!important;border-color:#f87171!important}
+.q button.wrong::before{content:"✕";background:#f87171}
+@media(prefers-reduced-motion:reduce){button:not(.wv){transition:none}button:not(.wv):hover{transform:none}#play,#goW,#goR,#goWR{animation:none}}
+</style>
+</head>
+<body>
+<nav class="series" aria-label="AXI4 series"><a class="home" href="index.html">AXI4 series home</a><a id="nv-p1" href="basics.html" aria-current="page">1 · Basics</a><a id="nv-p2" href="burst.html#fixed">2 · FIXED</a><a id="nv-p3" href="burst.html#incr">3 · INCR</a><a id="nv-p4" href="burst.html#wrap">4 · WRAP</a><a id="nv-p5" href="4kb-boundary.html">5 · 4 KB boundary</a></nav>
+<header class="band" style="padding-bottom:12px"><div class="wrap">
+<h1>AXI4 basics, one picture at a time</h1>
+<p class="lede">AXI4 is the rulebook Arm wrote for how blocks inside a chip talk to each other: a processor to memory, a DMA engine to a peripheral. Start with the diagram below: press a button and watch a write or a read happen.</p>
+<nav class="toc" aria-label="On this page"><a href="#channels">5 channels</a><a href="#handshake">Handshake</a><a href="#words">Key words</a><a href="#bursts">Bursts</a><a href="#resp">Responses</a><a href="#ids">IDs and ordering</a><a href="#signals">Signal list</a><a href="#rules">Rules to remember</a><a href="#quiz">Quiz</a></nav>
+<div class="key"><b style="color:#e7eef9">Colour key:</b><span><i class="k1"></i>Run the animation</span><span><i class="k2"></i>Option you can pick</span><span><i class="k2s"></i>Option selected</span><span><i class="k3"></i>Load an example</span><span><i class="k4"></i>Jump to a section</span></div>
+
+</div></header>
+
+<section class="band" id="channels" style="padding-top:8px"><div class="wrap">
+<h2>A master and a slave, joined by five one-way channels</h2>
+<p>The <strong>master</strong> starts every transaction (a CPU or DMA). The <strong>slave</strong> answers (a memory or peripheral). Writes use three channels, reads use two, and each channel only carries information in one direction.</p>
+<div class="demo"><aside class="ctrl" aria-label="Channel animation controls"><div class="tryhd"><b>Try it</b><span>Press a button, watch the five channels</span></div><div class="stack"><button id="goW">▶ Write 4 beats</button><button id="goR">▶ Read 4 beats</button><button id="goWR">▶ Write and read together</button><button id="goX">↺ Reset</button></div><span class="hint" id="tcount"></span></aside><div class="out"><div class="chan">
+ <div class="node"><div>Master<small>CPU, DMA</small></div></div>
+ <div><div class="ends"><span>◀ Master (CPU, DMA)</span><span>Slave (memory) ▶</span></div><div class="lanes" id="lanes"></div></div>
+ <div class="node"><div>Slave<small>Memory, peripheral</small></div></div>
+</div>
+<div class="cap"><div class="capb"><b>Write</b><span id="capW">Press "Write 4 beats" to start.</span></div><div class="capb r"><b>Read</b><span id="capR">Press "Read 4 beats" to start.</span></div></div>
+</div></div>
+<div class="analogy">
+ <div><h3>A write is like posting a parcel</h3><p>You write the address label (AW), send the contents in one or more boxes (W), and get a single delivery receipt back (B).</p></div>
+ <div><h3>A read is like ordering by mail</h3><p>You send a request slip with the address (AR), and the goods come back in boxes, each with a note saying all is well or not (R).</p></div>
+ <div><h3>Why separate channels?</h3><p>Reads and writes never block each other, and a master can send new addresses while older data is still moving. That is where AXI's speed comes from.</p></div>
+</div>
+</div></section>
+
+<section class="band alt" id="handshake"><div class="wrap">
+<h2>The handshake: VALID meets READY</h2>
+<p>Every channel uses the same two wires. The sender raises <strong>VALID</strong> when it has something. The receiver raises <strong>READY</strong> when it can take it. Information moves on the rising clock edge where <strong>both are high</strong>. Click any cell to flip VALID or READY, or load a pattern.</p>
+<div class="demo"><aside class="ctrl" aria-label="Handshake controls"><div class="tryhd"><b>Try it</b><span>Load a pattern, or click VALID and READY on the waveform</span></div><div class="stack" id="hsp"></div></aside><div class="out"><div class="scroll"><div class="wave" id="wave"></div></div><div id="hsv"></div></div></div>
+</div></section>
+
+<section class="band" id="words"><div class="wrap">
+<h2>Four words that get mixed up</h2>
+<p class="hint">For the interactive version see <a class="go" href="burst.html#terms">burst types, section 2</a></p>
+<div class="cards">
+ <div class="card"><b>Transfer</b><p>One VALID/READY handshake on any channel. The address, each data piece and the write response are all transfers.</p></div>
+ <div class="card"><b>Beat</b><p>One data transfer inside a burst. A beat is a transfer; the address and response are not beats.</p></div>
+ <div class="card"><b>Burst</b><p>All the beats produced from one start address. AxLEN + 1 beats long.</p></div>
+ <div class="card"><b>Transaction</b><p>The whole job: address + all beats + (for writes) the response. A 4-beat write = 1 + 4 + 1 = 6 transfers.</p></div>
+</div>
+</div></section>
+
+<section class="band alt" id="bursts"><div class="wrap">
+<h2>Bursts: send one address, move many beats</h2>
+<p>The master sends only the first address. Three fields tell the slave how to work out the rest: <code>AxLEN</code> = beats − 1, <code>AxSIZE</code> = bytes per beat as a power of two, and <code>AxBURST</code> = how the address moves. Here are 4 beats of 4 bytes starting at 0x38:</p>
+<div class="bursts">
+ <div class="bt"><h3>FIXED <span class="mono hint">2'b00</span></h3><div class="addrs"><span>0x38</span><span>0x38</span><span>0x38</span><span>0x38</span></div><p>Same address every time. For a FIFO register. Up to 16 beats.</p></div>
+ <div class="bt"><h3>INCR <span class="mono hint">2'b01</span></h3><div class="addrs"><span>0x38</span><span>0x3C</span><span>0x40</span><span>0x44</span></div><p>Goes up by the beat size. For memory. 1 to 256 beats; must not cross a 4 KB boundary.</p></div>
+ <div class="bt"><h3>WRAP <span class="mono hint">2'b10</span></h3><div class="addrs"><span>0x38</span><span>0x3C</span><span class="w">0x30</span><span class="w">0x34</span></div><p>Goes up, then wraps inside a 16-byte window (0x30–0x3F). For cache lines. 2, 4, 8 or 16 beats.</p></div>
+</div>
+<p style="margin-top:14px">Try every combination in the <a class="go" href="burst.html">burst simulator</a> and the <a class="go" href="4kb-boundary.html">4 KB boundary explorer</a>.</p>
+</div></section>
+
+<section class="band" id="resp"><div class="wrap">
+<h2>Every transaction gets an answer</h2>
+<p>A write gets <strong>one</strong> response on B, after the last beat. A read gets a response on <strong>every</strong> R beat. A burst always runs to its full length, even after an error.</p>
+<div class="cards">
+ <div class="card"><b class="mono">OKAY</b> <span class="mono hint">2'b00</span><p>Normal success. Also the answer when an exclusive access fails.</p></div>
+ <div class="card"><b class="mono">EXOKAY</b> <span class="mono hint">2'b01</span><p>An exclusive access succeeded.</p></div>
+ <div class="card"><b class="mono">SLVERR</b> <span class="mono hint">2'b10</span><p>The slave got the request but could not do it, such as a write to a read-only register.</p></div>
+ <div class="card"><b class="mono">DECERR</b> <span class="mono hint">2'b11</span><p>No slave lives at that address. Usually sent by the interconnect.</p></div>
+</div>
+</div></section>
+
+<section class="band alt" id="ids"><div class="wrap">
+<h2>IDs let fast answers overtake slow ones</h2>
+<p>The master sends read A to slow DRAM, then read B to fast on-chip SRAM. Whether B may finish first depends only on their IDs: <strong>same ID must stay in order, different IDs may finish in any order.</strong></p>
+<div class="demo"><aside class="ctrl" aria-label="ID ordering controls"><div class="tryhd"><b>Try it</b><span>Pick the IDs, watch who finishes first</span></div><div class="stack"><button id="idS" data-v="same">Same ID (A=0, B=0)</button><button id="idD" data-v="diff">Different IDs (A=0, B=1)</button></div></aside><div class="out"><div class="axis"><span></span><div id="ax"></div></div>
+<div class="tline" id="tline"></div>
+<div class="verdict" id="idv"></div></div></div>
+</div></section>
+
+<section class="band" id="signals"><div class="wrap">
+<h2>The signal list, channel by channel</h2>
+<div class="demo"><aside class="ctrl" aria-label="Signal list channel picker"><div class="tryhd"><b>Try it</b><span>Pick a channel</span></div><div class="tabs stack" id="tabs"></div></aside><div class="out"><div class="scroll"><table><thead><tr><th scope="col">Signal</th><th scope="col">Width</th><th scope="col">Driven by</th><th scope="col">What it means</th></tr></thead><tbody id="sigs"></tbody></table></div></div></div>
+<p class="hint" style="margin-top:10px">New in AXI4 compared with AXI3: AxLEN widened to 8 bits (256-beat INCR), AxQOS, AxREGION and the USER signals added, AxLOCK cut to 1 bit (locked access removed), WID removed (no write interleaving).</p>
+</div></section>
+
+<section class="band alt" id="rules"><div class="wrap">
+<h2>Rules to remember</h2>
+<div class="rules">
+ <div><h3>Reset quietly</h3><p>While ARESETn is low, the master drives ARVALID, AWVALID and WVALID low and the slave drives RVALID and BVALID low. VALID may rise only on a clock edge after reset is released.</p></div>
+ <div><h3>Never wait for READY</h3><p>A sender must not wait for READY before raising VALID. A receiver may wait for VALID before raising READY. This stops the two sides deadlocking.</p></div>
+ <div><h3>Hold until accepted</h3><p>Once VALID is high, it and the information must stay unchanged until the handshake completes.</p></div>
+ <div><h3>Read data after the address</h3><p>The slave must see ARVALID and ARREADY both high before it raises RVALID.</p></div>
+ <div><h3>Write response after everything</h3><p>BVALID only after the last W beat (WLAST) and, in AXI4, the AW address have both been accepted. W data may arrive before AW.</p></div>
+ <div><h3>No early stop, no 4 KB crossing</h3><p>A burst always completes all AxLEN + 1 beats. An INCR burst must stay inside one 4 KB page.</p></div>
+</div>
+</div></section>
+
+<section class="band" id="quiz"><div class="wrap">
+<h2>Check yourself</h2>
+<div class="quiz" id="qz"></div>
+<footer style="margin-top:28px">Part of the AXI4 interactive series: <a class="go" href="burst.html">burst types</a>, <a class="go" href="4kb-boundary.html">4 KB boundary</a>.</footer>
+</div></section>
+
+<script>
+{
+const $=id=>document.getElementById(id);
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- channel animation ---------- */
+const LN=[
+ {id:'AW',nm:'AW · Write address',dir:1,sg:'AWADDR, AWLEN, AWSIZE, AWBURST, AWID'},
+ {id:'W',nm:'W · Write data',dir:1,sg:'WDATA, WSTRB, WLAST'},
+ {id:'B',nm:'B · Write response',dir:-1,sg:'BRESP, BID'},
+ {id:'AR',nm:'AR · Read address',dir:1,sg:'ARADDR, ARLEN, ARSIZE, ARBURST, ARID'},
+ {id:'R',nm:'R · Read data',dir:-1,sg:'RDATA, RRESP, RLAST, RID'}
+];
+$('lanes').innerHTML=LN.map(l=>`<div class="lane${l.dir<0?' bk':''}" id="ln${l.id}"><span class="nm">${l.nm}</span><span class="ar">${l.dir>0?'master → slave':'slave → master'}</span><span class="sg">${l.sg}</span><span class="ct" id="ct${l.id}"></span><div class="pkt" id="pk${l.id}"></div></div>`).join('');
+const SEQ={
+ w:[{l:'AW',t:'ADDR',c:'The master puts the address on AW: AWADDR = 0x1000, AWLEN = 3 (4 beats), AWSIZE = 2 (4 bytes), AWBURST = INCR. AWVALID and AWREADY are both high, so the address is accepted.'},
+  {l:'W',t:'D0',c:'Beat 0 on W: WDATA with WSTRB = 4\'hF (all 4 bytes valid). The slave works out the address 0x1000 itself.'},
+  {l:'W',t:'D1',c:'Beat 1 goes to 0x1004. The master never sends this address; the slave adds 4.'},
+  {l:'W',t:'D2',c:'Beat 2 goes to 0x1008.'},
+  {l:'W',t:'D3 LAST',c:'Beat 3 goes to 0x100C with WLAST = 1, telling the slave this is the final beat.'},
+  {l:'B',t:'OKAY',c:'Only now does the slave answer, once, on B: BRESP = OKAY. The write transaction is complete: 1 + 4 + 1 = 6 transfers.'}],
+ r:[{l:'AR',t:'ADDR',c:'The master puts the address on AR: ARADDR = 0x2000, ARLEN = 3, ARSIZE = 2, ARBURST = INCR. ARVALID and ARREADY are high: request accepted.'},
+  {l:'R',t:'D0 OKAY',c:'The slave returns beat 0 on R, with RRESP = OKAY attached. There is no separate read-response channel.'},
+  {l:'R',t:'D1 OKAY',c:'Beat 1 from 0x2004, again with its own RRESP.'},
+  {l:'R',t:'D2 OKAY',c:'Beat 2 from 0x2008.'},
+  {l:'R',t:'D3 LAST',c:'Beat 3 from 0x200C with RLAST = 1. The read is complete: 1 + 4 = 5 transfers.'}]
+};
+const run={w:-1,r:-1};let timer=null,tcount=0;const counts={};
+function fly(lid,txt){
+ const l=LN.find(x=>x.id===lid),ln=$('ln'+lid),pk=$('pk'+lid);
+ for(const x of LN)if(x.id===lid)ln.classList.add('on');
+ pk.textContent=txt;pk.style.transition='none';pk.style.opacity=1;
+ const span=ln.clientWidth-pk.offsetWidth-8;
+ const a=l.dir>0?8:span,b=l.dir>0?span:8;
+ pk.style.transform=`translateX(${a}px)`;void pk.offsetWidth;
+ pk.style.transition=reduce?'none':'transform .75s ease-in-out';
+ pk.style.transform=`translateX(${b}px)`;
+ counts[lid]=(counts[lid]||0)+1;$('ct'+lid).textContent=`${counts[lid]} transfer${counts[lid]>1?'s':''}`;
+ tcount++;$('tcount').textContent=`Handshakes so far: ${tcount}`;
+}
+function tick(){
+ for(const x of LN)$('ln'+x.id).classList.remove('on');
+ let any=false;
+ for(const k of ['w','r']){
+  if(run[k]<0)continue;
+  const s=SEQ[k][run[k]];
+  if(!s){run[k]=-1;continue}
+  any=true;fly(s.l,s.t);$(k==='w'?'capW':'capR').textContent=`Step ${run[k]+1} of ${SEQ[k].length}. ${s.c}`;run[k]++;
+ }
+ if(!any){clearInterval(timer);timer=null;for(const x of LN){$('ln'+x.id).classList.remove('on')}}
+}
+function start(ks){
+ clearInterval(timer);reset(false);
+ for(const k of ks)run[k]=0;
+ tick();timer=setInterval(tick,1250);
+}
+function reset(full=true){
+ clearInterval(timer);timer=null;run.w=run.r=-1;tcount=0;
+ for(const x of LN){counts[x.id]=0;$('ct'+x.id).textContent='';$('pk'+x.id).style.opacity=0;$('ln'+x.id).classList.remove('on')}
+ $('tcount').textContent='';
+ if(full){$('capW').textContent='Press "Write 4 beats" to start.';$('capR').textContent='Press "Read 4 beats" to start.'}
+ else{$('capW').textContent='—';$('capR').textContent='—'}
+}
+$('goW').onclick=()=>start(['w']);$('goR').onclick=()=>start(['r']);$('goWR').onclick=()=>start(['w','r']);$('goX').onclick=()=>reset(true);
+
+/* ---------- handshake waveform ---------- */
+const HP=[
+ {n:'VALID first',v:[0,1,1,1,0,0,0,0,0,0],r:[0,0,0,1,0,0,0,0,0,0],t:'The sender raises VALID in cycle 2 and holds it. The receiver is busy until cycle 4, so the data waits. The transfer happens at the clock edge ending cycle 4.'},
+ {n:'READY first',v:[0,0,0,1,0,0,0,0,0,0],r:[0,1,1,1,1,1,0,0,0,0],t:'The receiver is ready early, from cycle 2. That is allowed. The transfer happens as soon as VALID arrives, at the edge ending cycle 4.'},
+ {n:'Same cycle',v:[0,0,1,0,0,0,0,0,0,0],r:[0,0,1,0,0,0,0,0,0,0],t:'Both go high together in cycle 3, so the transfer completes at the very next edge. The fastest case.'},
+ {n:'Back-to-back',v:[0,1,1,1,1,0,0,0,0,0],r:[0,1,1,1,1,0,0,0,0,0],t:'Both stay high for 4 cycles: one transfer per clock, D0 to D3. This is full throughput.'},
+ {n:'Backpressure',v:[0,1,1,1,1,1,1,0,0,0],r:[0,1,0,1,0,0,1,0,0,0],t:'The receiver keeps dropping READY. The sender just holds VALID and the same data until it is taken. Three transfers in six cycles.'},
+ {n:'Bug: VALID drops',v:[0,1,1,0,0,1,0,0,0,0],r:[0,0,0,0,0,1,0,0,0,0],t:'The sender lowers VALID in cycle 4 before READY ever came. That breaks the rule: once raised, VALID must stay high until the handshake.'}
+];
+const hs={v:[...HP[0].v],r:[...HP[0].r],p:0};
+$('hsp').innerHTML=HP.map((p,i)=>`<button data-i="${i}">${p.n}</button>`).join('');
+const clk='<svg viewBox="0 0 100 30" preserveAspectRatio="none"><path d="M0,26 L0,4 L50,4 L50,26 L100,26" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>';
+function drawHS(){
+ const N=10,v=hs.v,r=hs.r,tf=v.map((x,i)=>x&&r[i]);
+ const bad=v.map((x,i)=>x&&!r[i]&&i<N-1&&!v[i+1]);
+ let p=0;const dat=v.map((x,i)=>{const s=x?`<i>D${p}</i>`:'';if(x&&r[i])p++;return s});
+ const cell=(arr,k,cls)=>arr.map((x,i)=>`<button class="wv ${cls}${x?' h':''}${i>0&&arr[i-1]!==x?' e':''}${k==='v'&&(bad[i]||bad[i-1]&&!x)?' x':''}${tf[i]?' col-t':''}" data-k="${k}" data-i="${i}" aria-label="${k==='v'?'VALID':'READY'} cycle ${i+1}: ${x?'high':'low'}"></button>`).join('');
+ $('wave').innerHTML=`<span></span>${Array.from({length:N},(_,i)=>`<div class="cy">${i+1}</div>`).join('')}`+
+  `<span class="lb">ACLK</span>${Array.from({length:N},()=>`<div class="clk">${clk}</div>`).join('')}`+
+  `<span class="lb" style="color:var(--u)">VALID</span>${cell(v,'v','v')}`+
+  `<span class="lb">DATA</span>${dat.map((d,i)=>`<div class="dat${tf[i]?' col-t':''}">${d}</div>`).join('')}`+
+  `<span class="lb" style="color:var(--back)">READY</span>${cell(r,'r','r')}`+
+  `<span class="lb">Moved</span>${tf.map(x=>`<div class="tf${x?' col-t':''}">${x?'✓':''}</div>`).join('')}`;
+ const n=tf.filter(Boolean).length,nb=bad.filter(Boolean).length;
+ $('hsv').innerHTML=nb?`<div class="verdict bad"><strong>Rule broken: VALID dropped before READY.</strong> ${HP[hs.p]?.v.join()===v.join()&&HP[hs.p]?.r.join()===r.join()?HP[hs.p].t:'Keep VALID high until the cycle where READY is also high.'}</div>`
+  :`<div class="verdict"><strong>${n} transfer${n===1?'':'s'} in 10 cycles.</strong> ${HP[hs.p]?.v.join()===v.join()&&HP[hs.p]?.r.join()===r.join()?HP[hs.p].t:'Your own pattern. Green columns show where VALID and READY are both high; data moves at the rising edge that ends that cycle.'}</div>`;
+}
+$('wave').addEventListener('click',e=>{const b=e.target.closest('.wv');if(!b)return;const a=hs[b.dataset.k];a[+b.dataset.i]^=1;drawHS()});
+$('hsp').addEventListener('click',e=>{const i=e.target.closest('button')?.dataset.i;if(i===undefined)return;hs.p=+i;hs.v=[...HP[i].v];hs.r=[...HP[i].r];drawHS()});
+
+/* ---------- IDs ---------- */
+let idm='diff';
+function drawID(){
+ for(const b of [$('idS'),$('idD')])b.setAttribute('aria-pressed',b.dataset.v===idm);
+ const T=16,A={s:1,lat:10},B={s:2,lat:3};
+ const aDone=A.s+A.lat,bReady=B.s+B.lat,bDone=idm==='same'?Math.max(bReady,aDone+1):bReady;
+ const pc=x=>x/T*100;
+ const row=(nm,s,ready,done)=>`<div class="tr"><span class="nm">${nm}</span><div class="track">
+  <div class="seg wait" style="left:${pc(s)}%;width:${pc(ready-s)}%">waiting for memory</div>
+  ${done>ready?`<div class="seg blk" style="left:${pc(ready)}%;width:${pc(done-ready)}%">held back</div>`:''}
+  <div class="seg done" style="left:${pc(done)}%;width:${pc(1)}%">R</div></div></div></div></div>`;
+ $('ax').innerHTML=Array.from({length:T/2+1},(_,i)=>`<span>${i*2}</span>`).join('');
+ $('tline').innerHTML=row(`Read A (ID 0)<br><span class="hint">slow DRAM</span>`,A.s,aDone,aDone)+row(`Read B (ID ${idm==='same'?0:1})<br><span class="hint">fast SRAM</span>`,B.s,bReady,bDone);
+ $('idv').innerHTML=idm==='same'
+  ?`<strong>B finishes at cycle ${bDone}.</strong> Its data was ready at cycle ${bReady}, but with the same ID it must come back after A. ${bDone-bReady} cycles are wasted.`
+  :`<strong>B finishes at cycle ${bDone}, before A at cycle ${aDone}.</strong> Different IDs, so the slave may return B first. The master matches each response to its request using RID.`;
+}
+$('idS').onclick=()=>{idm='same';drawID()};$('idD').onclick=()=>{idm='diff';drawID()};
+
+/* ---------- signals ---------- */
+const SG={
+ 'Global':[['ACLK','1','Clock source','Clock. Everything is sampled on its rising edge'],['ARESETn','1','Reset source','Reset, active low']],
+ 'AW':[['AWID','x','Master','Transaction ID, used for ordering'],['AWADDR','x','Master','Address of the first beat'],['AWLEN','8','Master','Number of beats − 1 (0 to 255)'],['AWSIZE','3','Master','Bytes per beat = 2^AWSIZE'],['AWBURST','2','Master','FIXED, INCR or WRAP'],['AWLOCK','1','Master','Normal or exclusive access'],['AWCACHE','4','Master','Memory type: bufferable, modifiable, allocate hints'],['AWPROT','3','Master','Privileged, secure or non-secure, instruction or data'],['AWQOS','4','Master','Priority, 0 lowest to 15 highest'],['AWREGION','4','Master','Selects one of up to 16 regions in a slave'],['AWUSER','x','Master','Optional user-defined sideband'],['AWVALID','1','Master','Address and control are valid'],['AWREADY','1','Slave','Slave can accept the address']],
+ 'W':[['WDATA','x','Master','Write data, 8 to 1024 bits'],['WSTRB','x/8','Master','One bit per byte: which bytes are valid'],['WLAST','1','Master','This is the last beat of the burst'],['WUSER','x','Master','Optional user sideband'],['WVALID','1','Master','Write data is valid'],['WREADY','1','Slave','Slave can accept the data']],
+ 'B':[['BID','x','Slave','ID of the write this response belongs to'],['BRESP','2','Slave','OKAY, EXOKAY, SLVERR or DECERR'],['BUSER','x','Slave','Optional user sideband'],['BVALID','1','Slave','Write response is valid'],['BREADY','1','Master','Master can accept the response']],
+ 'AR':[['ARID','x','Master','Transaction ID'],['ARADDR','x','Master','Address of the first beat'],['ARLEN','8','Master','Number of beats − 1'],['ARSIZE','3','Master','Bytes per beat = 2^ARSIZE'],['ARBURST','2','Master','FIXED, INCR or WRAP'],['ARLOCK','1','Master','Normal or exclusive access'],['ARCACHE','4','Master','Memory type'],['ARPROT','3','Master','Protection type'],['ARQOS','4','Master','Priority'],['ARREGION','4','Master','Region identifier'],['ARUSER','x','Master','Optional user sideband'],['ARVALID','1','Master','Address and control are valid'],['ARREADY','1','Slave','Slave can accept the address']],
+ 'R':[['RID','x','Slave','ID of the read this data belongs to'],['RDATA','x','Slave','Read data'],['RRESP','2','Slave','Response for this beat'],['RLAST','1','Slave','This is the last beat of the burst'],['RUSER','x','Slave','Optional user sideband'],['RVALID','1','Slave','Read data is valid'],['RREADY','1','Master','Master can accept the data']]
+};
+let tab='AW';
+function drawSig(){
+ $('tabs').innerHTML=Object.keys(SG).map(k=>`<button data-k="${k}" aria-pressed="${k===tab}">${k==='Global'?'Clock and reset':k+' channel'}</button>`).join('');
+ $('sigs').innerHTML=SG[tab].map(s=>`<tr><td class="mono">${s[0]}</td><td class="mono">${s[1]}</td><td>${s[2]}</td><td>${s[3]}</td></tr>`).join('');
+}
+$('tabs').addEventListener('click',e=>{const k=e.target.closest('button')?.dataset.k;if(!k)return;tab=k;drawSig()});
+
+/* ---------- quiz ---------- */
+const Q=[
+ ['How many channels does an AXI4 interface have?',['3','4','5','6'],2,'AW, W and B for writes; AR and R for reads.'],
+ ['Why is there no separate read-response channel?',['Reads never fail','RRESP travels with every R data beat','The B channel is shared'],1,'The slave sends RRESP alongside each beat of read data on R.'],
+ ['Data moves on a channel when…',['VALID is high','READY is high','VALID and READY are both high at a rising clock edge'],2,'Both must be high at the same rising ACLK edge.'],
+ ['May a sender wait for READY before raising VALID?',['Yes','No'],1,'The sender must not wait. The receiver is allowed to wait for VALID. This prevents deadlock.'],
+ ['A write has AWLEN = 7. How many W beats?',['7','8','9'],1,'Beats = AxLEN + 1 = 8. The last one carries WLAST.'],
+ ['Two reads have different IDs. Can the second finish first?',['Yes','No, never','Only for writes'],0,'Different IDs have no ordering between them. Same IDs must complete in order.'],
+ ['A write to an address with no slave returns…',['OKAY','SLVERR','DECERR'],2,'DECERR (decode error), usually from the interconnect\'s default slave.'],
+ ['Can W data arrive before the AW address?',['Yes','No'],0,'Yes. The slave must accept write data that leads its address.']
+];
+$('qz').innerHTML=Q.map((q,i)=>`<div class="q" data-q="${i}"><p>${i+1}. ${q[0]}</p><div class="opts">${q[1].map((o,j)=>`<button data-j="${j}">${o}</button>`).join('')}</div><div class="ex" hidden>${q[3]}</div></div>`).join('');
+$('qz').addEventListener('click',e=>{const bt=e.target.closest('button');if(!bt)return;const box=bt.closest('.q'),q=Q[box.dataset.q];for(const x of box.querySelectorAll('button'))x.classList.remove('right','wrong');bt.classList.add(+bt.dataset.j===q[2]?'right':'wrong');box.querySelectorAll('button')[q[2]].classList.add('right');box.querySelector('.ex').hidden=false});
+
+drawHS();drawID();drawSig();
+}
+</script>
+<script>{const s=document.querySelector('.series'),t=document.querySelector('nav.toc');if(s){const home=s.querySelector('.home');const ph=document.createElement('span');ph.className='sh';ph.textContent='Pages';home.after(ph);if(t){const h=document.createElement('span');h.className='sh';h.textContent='On this page';s.appendChild(h);for(const a of t.querySelectorAll('a')){if(!(a.getAttribute('href')||'').startsWith('#'))continue;const c=a.cloneNode(true);c.className='sec';c.removeAttribute('id');s.appendChild(c)}}}}</script>
+</body>
+</html>
